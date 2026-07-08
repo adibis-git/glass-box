@@ -1,0 +1,79 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getActiveOrg } from "@/lib/activeOrg";
+import { prisma } from "@/lib/db";
+import { fmtDate } from "@/lib/utils";
+import { PageHeader } from "@/components/app/PageHeader";
+import { NewConversation } from "@/components/app/NewConversation";
+
+export default async function ConversationsPage() {
+  const ctx = await getActiveOrg();
+  if (!ctx?.active) redirect("/login");
+  const org = ctx.active;
+
+  const [conversations, readyDatasets] = await Promise.all([
+    prisma.conversation.findMany({
+      where: { orgId: org.id },
+      orderBy: { updatedAt: "desc" },
+      include: {
+        datasets: { include: { dataset: { select: { name: true } } } },
+        _count: { select: { messages: true } },
+      },
+      take: 50,
+    }),
+    prisma.dataset.findMany({
+      where: { orgId: org.id, deletedAt: null, status: "READY" },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true, rowCount: true },
+    }),
+  ]);
+
+  const canCreate = org.role !== "VIEWER";
+
+  return (
+    <div className="mx-auto max-w-4xl px-6 py-8">
+      <PageHeader
+        title="Conversations"
+        subtitle="Each conversation analyzes one or more datasets — pick several to let the agent join them."
+        action={canCreate ? <NewConversation orgId={org.id} datasets={readyDatasets} /> : undefined}
+      />
+      {conversations.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-panel/50 p-12 text-center">
+          <div className="mb-3 text-4xl">💬</div>
+          <h2 className="text-sm font-semibold text-foreground">No conversations yet</h2>
+          <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
+            Open a dataset and click <span className="text-foreground/80">Analyze</span> to start
+            your first conversation.
+          </p>
+          <Link
+            href="/app/datasets"
+            className="mt-4 inline-block text-sm text-accent hover:underline"
+          >
+            Go to datasets →
+          </Link>
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-2xl border border-border bg-panel">
+          {conversations.map((c) => (
+            <Link
+              key={c.id}
+              href={`/app/conversations/${c.id}`}
+              className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3 last:border-0 hover:bg-panel-2/50"
+            >
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium text-foreground">{c.title}</div>
+                <div className="truncate text-xs text-muted">
+                  {c.datasets.map((d) => d.dataset.name).join(" + ") || "no datasets"} ·{" "}
+                  {c._count.messages} messages
+                </div>
+              </div>
+              <span className="shrink-0 text-xs text-muted">
+                {fmtDate(c.updatedAt)}
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

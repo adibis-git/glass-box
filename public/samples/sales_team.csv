@@ -1,0 +1,111 @@
+rep_id,rep_name,region,segment,manager_name,hire_date,tenure_months,monthly_quota_usd
+REP-0001,Isabella Yamamoto,North America,Mid-Market,Priya Nair,2022-12-30,42,82000
+REP-0002,Omar Haddad,North America,Enterprise,Marcus Chen,2026-05-31,1,174000
+REP-0003,Priya Khan,North America,SMB,Marcus Chen,2025-11-29,7,28000
+REP-0004,Maria Nakamura,North America,SMB,Grace Whitfield,2025-06-30,12,28000
+REP-0005,Ava Okafor,North America,SMB,Marcus Chen,2025-06-30,12,33000
+REP-0006,Felix Richter,North America,Enterprise,Marcus Chen,2026-03-31,3,190000
+REP-0007,Daniel Marchetti,North America,Mid-Market,Priya Nair,2025-07-30,11,80000
+REP-0008,Raj Nair,North America,Mid-Market,Priya Nair,2024-07-30,23,82000
+REP-0009,James Chen,North America,Enterprise,Priya Nair,2023-10-30,32,157000
+REP-0010,Noah Nair,North America,Mid-Market,Grace Whitfield,2025-12-29,6,91000
+REP-0011,Aisha Okafor,North America,SMB,Grace Whitfield,2022-05-30,49,40000
+REP-0012,Maria Bennett,North America,SMB,Grace Whitfield,2025-12-29,6,36000
+REP-0013,Arjun Dubois,North America,Enterprise,Priya Nair,2025-01-29,17,224000
+REP-0014,Felix Weber,North America,Mid-Market,Marcus Chen,2026-03-31,3,63000
+REP-0015,Chen Singh,North America,SMB,Marcus Chen,2021-08-29,58,31000
+REP-0016,Felix Tanaka,North America,Enterprise,Grace Whitfield,2023-07-31,35,225000
+REP-0017,Chen Dubois,North America,Mid-Market,Priya Nair,2024-06-29,24,80000
+REP-0018,Chen Marchetti,North America,Enterprise,Marcus Chen,2026-05-31,1,231000
+REP-0019,Liam Rodriguez,North America,Mid-Market,Priya Nair,2025-03-30,15,81000
+REP-0020,Olivia Ibrahim,North America,Enterprise,Marcus Chen,2022-07-30,47,187000
+REP-0021,Priya Chen,North America,SMB,Priya Nair,2024-07-30,23,38000
+REP-0022,Nina Fonseca,North America,Mid-Market,Priya Nair,2025-07-30,11,79000
+REP-0023,Mason Suzuki,North America,Enterprise,Grace Whitfield,2024-12-29,18,239000
+REP-0024,Nina Mendes,North America,SMB,Priya Nair,2025-01-29,17,31000
+REP-0025,Omar Richter,North America,Mid-Market,Grace Whitfield,2023-02-28,40,78000
+REP-0026,Hiroshi Silva,North America,Mid-Market,Grace Whitfield,2026-02-28,4,99000
+REP-0027,James Dubois,North America,Enterprise,Priya Nair,2025-01-29,17,196000
+REP-0028,Hiroshi Khan,North America,SMB,Priya Nair,2023-07-31,35,30000
+REP-0029,Aisha Whitfield,North America,Mid-Market,Grace Whitfield,2024-09-29,21,98000
+REP-0030,Mia Tanaka,North America,Enterprise,Marcus Chen,2022-09-29,45,179000
+REP-0031,Felix Tanaka,North America,Mid-Market,Grace Whitfield,2026-03-31,3,97000
+REP-0032,Ines Petrov,North America,Enterprise,Grace Whitfield,2023-07-31,35,159000
+REP-0033,Mei Osei,North America,Enterprise,Marcus Chen,2022-10-30,44,175000
+REP-0034,Ines Rao,North America,Mid-Market,Priya Nair,2025-12-29,6,100000
+REP-0035,Liam Khan,North America,Enterprise,Marcus Chen,2025-01-29,17,181000
+REP-0036,Mia Haddad,North America,Mid-Market,Marcus Chen,2022-07-30,47,88000
+REP-0037,James Yamamoto,North America,Mid-Market,Priya Nair,2023-11-29,31,72000
+REP-0038,Daniel Dubois,North America,Mid-Market,Grace Whitfield,2024-06-29,24,86000
+REP-0039,Kwame Singh,EMEA,Enterprise,Klaus Richter,2023-08-30,34,245000
+REP-0040,James Okafor,EMEA,Mid-Market,Sofia Marchetti,2024-02-29,28,97000
+REP-0041,Noah Khan,EMEA,Mid-Market,Oliver Bennett,2022-10-30,44,65000
+REP-0042,Mia Alvarez,EMEA,SMB,Oliver Bennett,2022-04-30,50,38000
+REP-0043,Priya Yamamoto,EMEA,Mid-Market,Oliver Bennett,2025-11-29,7,78000
+REP-0044,Felix Kovac,EMEA,SMB,Klaus Richter,2025-01-29,17,34000
+REP-0045,Fatima Weber,EMEA,Enterprise,Klaus Richter,2024-02-29,28,174000
+REP-0046,Maria Nair,EMEA,Mid-Market,Oliver Bennett,2025-06-30,12,93000
+REP-0047,Liam Haddad,EMEA,Mid-Market,Klaus Richter,2021-11-29,55,67000
+REP-0048,Raj Nair,EMEA,Enterprise,Sofia Marchetti,2026-05-31,1,222000
+REP-0049,Fatima Yamamoto,EMEA,Mid-Market,Oliver Bennett,2024-10-29,20,92000
+REP-0050,Liam Weber,EMEA,Enterprise,Sofia Marchetti,2025-02-28,16,210000
+REP-0051,Lena Bennett,EMEA,Enterprise,Sofia Marchetti,2025-11-29,7,192000
+REP-0052,Lucas Silva,EMEA,Enterprise,Klaus Richter,2024-10-29,20,213000
+REP-0053,Lucas Whitfield,EMEA,SMB,Klaus Richter,2026-03-31,3,42000
+REP-0054,Clara Mendes,EMEA,Mid-Market,Sofia Marchetti,2023-04-30,38,74000
+REP-0055,Elena Tanaka,EMEA,Enterprise,Sofia Marchetti,2025-06-30,12,203000
+REP-0056,Tomas Petrov,EMEA,SMB,Klaus Richter,2024-08-29,22,29000
+REP-0057,Tomas Silva,EMEA,Enterprise,Oliver Bennett,2025-03-30,15,223000
+REP-0058,Carlos Larsson,EMEA,Enterprise,Klaus Richter,2025-06-30,12,249000
+REP-0059,Isabella Nair,EMEA,SMB,Oliver Bennett,2024-08-29,22,34000
+REP-0060,Grace Novak,EMEA,Enterprise,Oliver Bennett,2022-07-30,47,208000
+REP-0061,Noah Bennett,EMEA,Enterprise,Oliver Bennett,2026-03-31,3,180000
+REP-0062,Emma Fonseca,EMEA,SMB,Klaus Richter,2025-09-29,9,42000
+REP-0063,Ines Nair,EMEA,SMB,Sofia Marchetti,2022-04-30,50,29000
+REP-0064,Liam Alvarez,EMEA,Mid-Market,Oliver Bennett,2024-12-29,18,93000
+REP-0065,Olivia Kovac,EMEA,Mid-Market,Oliver Bennett,2024-11-29,19,83000
+REP-0066,Chen Osei,EMEA,Mid-Market,Sofia Marchetti,2022-08-30,46,97000
+REP-0067,Mia Tanaka,EMEA,Enterprise,Klaus Richter,2024-12-29,18,191000
+REP-0068,Sanjay Novak,EMEA,Mid-Market,Oliver Bennett,2025-07-30,11,80000
+REP-0069,Kenji Haddad,EMEA,Mid-Market,Sofia Marchetti,2025-09-29,9,86000
+REP-0070,Clara Novak,EMEA,Mid-Market,Oliver Bennett,2023-05-31,37,69000
+REP-0071,Raj Weber,EMEA,Mid-Market,Oliver Bennett,2025-08-30,10,99000
+REP-0072,Sanjay Nair,APAC,Mid-Market,Wei Tanaka,2025-02-28,16,94000
+REP-0073,Sofia Tanaka,APAC,Mid-Market,Wei Tanaka,2026-02-28,4,85000
+REP-0074,Mason Haddad,APAC,Mid-Market,Wei Tanaka,2024-06-29,24,70000
+REP-0075,Mia Khan,APAC,Mid-Market,Ananya Rao,2023-11-29,31,62000
+REP-0076,Yuki Osei,APAC,SMB,Wei Tanaka,2025-07-30,11,37000
+REP-0077,Raj Petrov,APAC,SMB,Wei Tanaka,2025-06-30,12,32000
+REP-0078,Mason Yamamoto,APAC,Mid-Market,Wei Tanaka,2026-03-31,3,94000
+REP-0079,Sophia Costa,APAC,SMB,Ananya Rao,2026-04-30,2,29000
+REP-0080,Ethan Osei,APAC,Mid-Market,Wei Tanaka,2025-06-30,12,91000
+REP-0081,Chen Mendes,APAC,SMB,Wei Tanaka,2024-12-29,18,35000
+REP-0082,Daniel Fonseca,APAC,Mid-Market,Ananya Rao,2026-02-28,4,61000
+REP-0083,Mei Nakamura,APAC,Mid-Market,Ananya Rao,2021-07-30,59,80000
+REP-0084,Elena Mendes,APAC,Mid-Market,Wei Tanaka,2026-04-30,2,85000
+REP-0085,Carlos Fonseca,APAC,Enterprise,Ananya Rao,2023-10-30,32,246000
+REP-0086,Yuki Marchetti,APAC,Mid-Market,Ananya Rao,2023-11-29,31,93000
+REP-0087,Maria Richter,APAC,Mid-Market,Ananya Rao,2025-07-30,11,80000
+REP-0088,Grace Tanaka,APAC,SMB,Wei Tanaka,2024-08-29,22,39000
+REP-0089,Nina Haddad,APAC,SMB,Wei Tanaka,2022-06-30,48,39000
+REP-0090,Elena Whitfield,APAC,Enterprise,Ananya Rao,2025-03-30,15,181000
+REP-0091,Mia Petrov,APAC,Mid-Market,Ananya Rao,2025-03-30,15,86000
+REP-0092,Arjun Dubois,APAC,Enterprise,Wei Tanaka,2025-09-29,9,231000
+REP-0093,Priya Petrov,APAC,SMB,Ananya Rao,2026-05-31,1,33000
+REP-0094,Ines Ibrahim,LATAM,SMB,Diego Fonseca,2024-06-29,24,32000
+REP-0095,Clara Okafor,LATAM,SMB,Diego Fonseca,2023-08-30,34,36000
+REP-0096,Kenji Osei,LATAM,SMB,Diego Fonseca,2025-03-30,15,29000
+REP-0097,Noah Lindgren,LATAM,Mid-Market,Diego Fonseca,2025-02-28,16,75000
+REP-0098,Felix Chen,LATAM,Mid-Market,Diego Fonseca,2024-06-29,24,97000
+REP-0099,Mei Novak,LATAM,Mid-Market,Diego Fonseca,2025-07-30,11,93000
+REP-0100,Daniel Richter,LATAM,Mid-Market,Diego Fonseca,2025-08-30,10,81000
+REP-0101,Daniel Kovac,LATAM,Mid-Market,Diego Fonseca,2025-08-30,10,78000
+REP-0102,Kenji Mendes,LATAM,SMB,Diego Fonseca,2022-06-30,48,40000
+REP-0103,Kwame Whitfield,LATAM,SMB,Diego Fonseca,2024-03-30,27,33000
+REP-0104,Arjun Weber,LATAM,Enterprise,Diego Fonseca,2022-07-30,47,199000
+REP-0105,Carlos Rodriguez,LATAM,Mid-Market,Diego Fonseca,2026-02-28,4,61000
+REP-0106,Priya Alvarez,LATAM,Mid-Market,Diego Fonseca,2025-07-30,11,89000
+REP-0107,Sophia Ibrahim,LATAM,Mid-Market,Diego Fonseca,2023-03-31,39,82000
+REP-0108,Sofia Suzuki,LATAM,SMB,Diego Fonseca,2025-01-29,17,44000
+REP-0109,Sanjay Silva,LATAM,SMB,Diego Fonseca,2025-09-29,9,44000
+REP-0110,Elena Yamamoto,LATAM,Mid-Market,Diego Fonseca,2024-07-30,23,67000

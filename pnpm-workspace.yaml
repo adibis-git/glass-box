@@ -1,3 +1,12 @@
-ignoredBuiltDependencies:
-  - sharp
-  - unrs-resolver
+# sharp (optional Next image optimizer) and unrs-resolver (native eslint resolver
+# accelerator, which has a JS fallback) don't need their native build step to build
+# or run this demo. Decline both so `pnpm install` is clean and non-interactive.
+allowBuilds:
+  # Prisma needs its postinstall scripts (query-engine binary download).
+  '@prisma/engines': true
+  prisma: true
+  '@prisma/client': true
+  sharp: false
+  unrs-resolver: false
+  # esbuild (tsx dependency) needs its binary install step.
+  esbuild: true

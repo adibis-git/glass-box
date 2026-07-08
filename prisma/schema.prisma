@@ -1,0 +1,233 @@
+// Glass Box SaaS — multi-tenant schema.
+// Runtime connects via @prisma/adapter-pg (works for local `prisma dev` and Neon).
+// For Neon: DATABASE_URL = pooled (-pooler) host; migrations use the direct host
+// (configured in prisma.config.ts at deploy time).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum DatasetStatus {
+  PROCESSING
+  NEEDS_SHEET_PICK
+  READY
+  ERROR
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+}
+
+enum RunStatus {
+  RUNNING
+  DONE
+  ERROR
+  CANCELLED
+}
+
+model User {
+  id            String       @id @default(cuid())
+  email         String       @unique
+  passwordHash  String? // null = OAuth-only account
+  name          String?
+  image         String?
+  emailVerified DateTime?
+  accounts      Account[]
+  memberships   Membership[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+// Auth.js OAuth account linking (Google)
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Organization {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  retentionDays Int? // null = keep until user deletes
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  memberships   Membership[]
+  invitations   Invitation[]
+  datasets      Dataset[]
+  conversations Conversation[]
+  reports       ReportSnapshot[]
+  auditLogs     AuditLog[]
+}
+
+model Membership {
+  id        String   @id @default(cuid())
+  userId    String
+  orgId     String
+  role      Role     @default(MEMBER)
+  createdAt DateTime @default(now())
+
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, orgId])
+  @@index([orgId])
+}
+
+model Invitation {
+  id          String    @id @default(cuid())
+  orgId       String
+  email       String
+  role        Role      @default(MEMBER)
+  token       String    @unique @default(cuid())
+  invitedById String?
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, email])
+  @@index([email])
+}
+
+model Dataset {
+  id                 String        @id @default(cuid())
+  orgId              String
+  uploadedById       String? // survives user deletion
+  name               String
+  originalFilename   String
+  mimeType           String
+  sizeBytes          BigInt
+  storageKey         String // normalized CSV artifact (canonical)
+  originalStorageKey String? // raw upload, purgeable independently
+  sheetName          String? // Excel source sheet, if applicable
+  availableSheets    Json? // sheet names when NEEDS_SHEET_PICK
+  rowCount           Int?
+  columnSchema       Json? // ColumnSchema[]
+  sampleRows         Json? // first 20 rows (what the LLM sees)
+  sampled            Boolean       @default(false) // strided-sample flag
+  normalizations     Json? // applied cleanups, shown in UI
+  status             DatasetStatus @default(PROCESSING)
+  errorMessage       String?
+  deletedAt          DateTime? // soft delete
+  purgeAt            DateTime? // scheduled hard delete (retention)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  org               Organization          @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  conversationLinks ConversationDataset[]
+
+  @@index([orgId, status, deletedAt])
+  @@index([purgeAt])
+}
+
+model Conversation {
+  id          String   @id @default(cuid())
+  orgId       String
+  createdById String?
+  title       String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  org      Organization          @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  datasets ConversationDataset[]
+  messages Message[]
+  reports  ReportSnapshot[]
+
+  @@index([orgId, updatedAt(sort: Desc)])
+}
+
+// Multi-dataset conversations (joins). alias = python variable name.
+model ConversationDataset {
+  conversationId String
+  datasetId      String
+  alias          String
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  dataset      Dataset      @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, datasetId])
+  @@unique([conversationId, alias])
+}
+
+model Message {
+  id             String      @id @default(cuid())
+  conversationId String
+  role           MessageRole
+  content        String?     @db.Text // user question text
+  events         Json? // AgentEvent[] — feed replay (assistant runs)
+  apiMessages    Json? // ChatMessage[] appended this turn — LLM context
+  report         Json? // FinalReport, if produced
+  inputTokens    Int         @default(0)
+  outputTokens   Int         @default(0)
+  status         RunStatus   @default(DONE)
+  error          String?
+  createdAt      DateTime    @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
+model ReportSnapshot {
+  id             String    @id @default(cuid())
+  orgId          String
+  conversationId String
+  messageId      String?
+  title          String
+  report         Json // FinalReport
+  charts         Json // ChartSpec[]
+  shareToken     String?   @unique // nanoid(32); null = private
+  revokedAt      DateTime?
+  createdById    String?
+  createdAt      DateTime  @default(now())
+
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id         BigInt   @id @default(autoincrement())
+  orgId      String
+  actorId    String? // null = system (retention cron)
+  action     String // "dataset.upload", "dataset.hard_delete", ...
+  targetType String?
+  targetId   String?
+  metadata   Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt(sort: Desc)])
+  @@index([orgId, action])
+}

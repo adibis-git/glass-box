@@ -32,10 +32,28 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
 
+# Large uploaded datasets — keep out of the repo (upload via the UI instead).
+# The bundled demo samples are kept.
+/public/samples/*
+!/public/samples/indian_startup_funding.csv
+!/public/samples/ecommerce_sales.csv
+!/public/samples/employee_attrition.csv
+!/public/samples/sales_team.csv
+!/public/samples/sales_prospects.csv
+!/public/samples/sales_meetings.csv
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/lib/generated/prisma
+
+# runtime data, caches, and temp fixtures — never commit
+/.data
+/.pyodide-cache
+/.tmp-fixtures

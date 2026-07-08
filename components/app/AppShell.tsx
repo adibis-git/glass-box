@@ -1,0 +1,184 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { SessionProvider, useSession, signOut } from "next-auth/react";
+import { useState } from "react";
+import { cn } from "@/lib/utils";
+import type { OrgSummary } from "@/lib/activeOrg";
+
+const NAV = [
+  { href: "/app/datasets", label: "Datasets", icon: "🗂️" },
+  { href: "/app/conversations", label: "Conversations", icon: "💬" },
+  { href: "/app/members", label: "Members", icon: "👥" },
+  { href: "/app/audit", label: "Audit log", icon: "🧾" },
+  { href: "/app/settings", label: "Settings", icon: "⚙️" },
+];
+
+const CONNECTORS = [
+  { name: "PostgreSQL", icon: "🐘" },
+  { name: "Snowflake", icon: "❄️" },
+  { name: "Google Sheets", icon: "📄" },
+];
+
+function OrgSwitcher({ orgs, active }: { orgs: OrgSummary[]; active: OrgSummary }) {
+  const { update } = useSession();
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function switchTo(org: OrgSummary) {
+    if (org.id === active.id) return setOpen(false);
+    setBusy(true);
+    await update({ activeOrgId: org.id, activeRole: org.role });
+    setOpen(false);
+    setBusy(false);
+    router.refresh();
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-panel-2 px-3 py-2 text-left hover:border-muted/50"
+      >
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-medium text-foreground">{active.name}</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-accent">
+            {active.role}
+          </span>
+        </span>
+        <span className="text-muted">▾</span>
+      </button>
+      {open && (
+        <div className="absolute left-0 right-0 z-20 mt-1 overflow-hidden rounded-lg border border-border bg-panel shadow-xl">
+          {orgs.map((o) => (
+            <button
+              key={o.id}
+              disabled={busy}
+              onClick={() => switchTo(o)}
+              className={cn(
+                "block w-full px-3 py-2 text-left text-sm hover:bg-panel-2",
+                o.id === active.id ? "text-accent" : "text-foreground/85",
+              )}
+            >
+              {o.name}
+              <span className="ml-2 text-[10px] uppercase text-muted">{o.role}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Shell({
+  orgs,
+  active,
+  userName,
+  userEmail,
+  children,
+}: {
+  orgs: OrgSummary[];
+  active: OrgSummary;
+  userName: string | null;
+  userEmail: string;
+  children: React.ReactNode;
+}) {
+  const pathname = usePathname();
+
+  return (
+    <div className="flex h-screen">
+      {/* Sidebar */}
+      <aside className="flex w-60 shrink-0 flex-col border-r border-border bg-panel">
+        <Link href="/app" className="flex items-center gap-2 px-4 py-4">
+          <span className="grid h-7 w-7 place-items-center rounded-md border border-accent/40 bg-accent/15 text-sm">
+            🔎
+          </span>
+          <span className="font-semibold tracking-tight text-foreground">Glass Box</span>
+        </Link>
+
+        <div className="px-3 pb-3">
+          <OrgSwitcher orgs={orgs} active={active} />
+        </div>
+
+        <nav className="flex-1 space-y-0.5 px-3">
+          {NAV.map((item) => {
+            const activeNav = pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm",
+                  activeNav
+                    ? "bg-accent/15 font-medium text-accent"
+                    : "text-foreground/75 hover:bg-panel-2 hover:text-foreground",
+                )}
+              >
+                <span className="text-base leading-none">{item.icon}</span>
+                {item.label}
+              </Link>
+            );
+          })}
+
+          {/* Connector teaser */}
+          <div className="mt-6 px-3">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+              Data sources
+            </div>
+            <div className="mt-2 space-y-1">
+              {CONNECTORS.map((c) => (
+                <div
+                  key={c.name}
+                  className="flex items-center justify-between rounded-lg border border-dashed border-border px-3 py-1.5 opacity-55"
+                  title="Coming soon"
+                >
+                  <span className="flex items-center gap-2 text-xs text-foreground/70">
+                    <span>{c.icon}</span> {c.name}
+                  </span>
+                  <span className="rounded bg-panel-2 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-muted">
+                    Soon
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </nav>
+
+        <div className="border-t border-border p-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="truncate text-sm text-foreground">{userName ?? userEmail}</div>
+              <div className="truncate text-xs text-muted">{userEmail}</div>
+            </div>
+            <button
+              onClick={() => signOut({ callbackUrl: "/" })}
+              className="rounded-md px-2 py-1 text-xs text-muted hover:bg-panel-2 hover:text-foreground"
+              title="Sign out"
+            >
+              ⎋
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main */}
+      <main className="flex-1 overflow-y-auto">{children}</main>
+    </div>
+  );
+}
+
+export function AppShell(props: {
+  orgs: OrgSummary[];
+  active: OrgSummary;
+  userName: string | null;
+  userEmail: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <SessionProvider>
+      <Shell {...props} />
+    </SessionProvider>
+  );
+}
