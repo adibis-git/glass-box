@@ -1,0 +1,30 @@
+# Build context hygiene. Everything here is either rebuilt inside the image or
+# must never enter it.
+
+# Secrets / env — the runtime gets these from compose env_file at run time.
+# Excluding them also stops Next standalone from baking a stale .env into the image.
+.env
+.env.*
+
+# Rebuilt in the image.
+node_modules
+.next
+.pnpm-store
+
+# Runtime state — must not leak host data into the image.
+.data
+.pyodide-cache
+data
+
+# VCS / editor / OS cruft.
+.git
+.gitignore
+.vscode
+.idea
+.DS_Store
+**/*.log
+
+# Docs/deploy artifacts not needed for the build.
+DEPLOY.md
+README.md
+LICENSE

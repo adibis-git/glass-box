@@ -1,0 +1,93 @@
+# Glass Box — always-on production stack.
+#
+#   db          Postgres 16 (internal only; data on a named volume)
+#   app         the standalone Next.js server + in-process Pyodide kernels
+#   cloudflared Cloudflare Tunnel — outbound-only, publishes the app over HTTPS
+#
+# No host ports are published: this VPS runs other projects, and the tunnel
+# reaches the app over the internal network (app:3000). Everything is
+# restart: unless-stopped so the stack returns after a reboot with no laptop.
+#
+# A fourth service, `migrate`, is profiled off — it never starts with `up`.
+# Run it once after first `up` to apply the schema:
+#     docker compose run --rm migrate
+#
+# Secrets/config come from ./.env (untracked). See .env.production.example.
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: glassbox
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: glassbox
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U glassbox -d glassbox"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - glassbox
+
+  app:
+    build:
+      context: .
+      target: runner
+    image: glass-box-app:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - appdata:/data                       # DATA_DIR — uploaded dataset files
+      - pyodide_cache:/app/.pyodide-cache   # CACHE_DIR — pandas/numpy wheels (download once)
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - glassbox
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    # Quick tunnel: no account/token needed. Prints a random *.trycloudflare.com
+    # HTTPS URL (see `docker compose logs cloudflared`). NOTE: the URL is
+    # EPHEMERAL — it changes whenever this container restarts (crash or reboot).
+    # For a STABLE hostname that survives reboots, switch to a named tunnel:
+    #   command: ["tunnel", "--no-autoupdate", "run"]
+    #   environment: { TUNNEL_TOKEN: "${CLOUDFLARE_TUNNEL_TOKEN}" }
+    # (create the tunnel + public-hostname route → http://app:3000 in the
+    #  Cloudflare Zero Trust dashboard, then set AUTH_URL to that hostname).
+    command: ["tunnel", "--no-autoupdate", "--url", "http://app:3000"]
+    depends_on:
+      - app
+    networks:
+      - glassbox
+
+  # One-off schema apply. Built from the `builder` stage (has the Prisma CLI,
+  # schema, and prisma.config.ts). Profiled so `up` never starts it.
+  #   docker compose run --rm migrate
+  migrate:
+    profiles: ["migrate"]
+    build:
+      context: .
+      target: builder
+    env_file:
+      - .env
+    command: ["corepack", "pnpm", "exec", "prisma", "db", "push"]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - glassbox
+
+volumes:
+  pgdata:
+  appdata:
+  pyodide_cache:
+
+networks:
+  glassbox:
+    name: glassbox
