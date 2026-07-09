@@ -132,6 +132,17 @@ function RunBlock({
   const steps = state.feed.filter((f) => f.kind === "code").length;
   const corrections = state.feed.filter((f) => f.kind === "correction").length;
 
+  // Conversational answer: when the turn produced NO report, the model's final
+  // text IS the answer — surface it as a prominent reply bubble instead of
+  // burying it inside the collapsed trace. (When a report exists, the report
+  // card is the headline, so we don't promote a plan block.) The promoted item
+  // is removed from the trace so it isn't shown twice.
+  const planItems = state.feed.filter(
+    (f): f is Extract<typeof f, { kind: "plan" }> => f.kind === "plan" && f.text.trim() !== "",
+  );
+  const answerItem = !state.report && planItems.length > 0 ? planItems[planItems.length - 1] : null;
+  const traceFeed = answerItem ? state.feed.filter((f) => f.id !== answerItem.id) : state.feed;
+
   return (
     <div className="space-y-4">
       {/* Question */}
@@ -176,6 +187,20 @@ function RunBlock({
             )}
           </div>
         )}
+        {/* Primary conversational answer (non-report turns) */}
+        {answerItem && (
+          <div className="flex items-start gap-2.5">
+            <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/15 text-sm">
+              💬
+            </span>
+            <div className="min-w-0 flex-1 rounded-xl rounded-tl-sm border border-accent/30 bg-accent/5 px-4 py-3">
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                {answerItem.text}
+                {answerItem.streaming && <span className="gb-pulse">▍</span>}
+              </p>
+            </div>
+          </div>
+        )}
         {state.charts.length > 0 && (
           <div className="grid gap-4">
             {state.charts.map((c) => (
@@ -194,11 +219,14 @@ function RunBlock({
           </div>
         )}
 
-        {/* Collapsible agent trace — the glass box */}
-        {state.feed.length > 0 && (
+        {/* Collapsible agent trace — the glass box. Shows the WORK behind the
+            answer (plan · code · output · fixes); the answer/report itself is
+            surfaced above, so this stays collapsed by default. */}
+        {traceFeed.length > 0 && (
           <details className="group rounded-xl border border-border bg-panel/60" open={live}>
             <summary className="cursor-pointer select-none px-4 py-2.5 text-xs font-medium text-muted hover:text-foreground">
-              🔎 Agent trace — {steps} step{steps === 1 ? "" : "s"}
+              🔎 {answerItem || state.report ? "Show the work" : "Agent trace"}
+              {steps > 0 && <span className="ml-1">— {steps} step{steps === 1 ? "" : "s"}</span>}
               {corrections > 0 && (
                 <span className="ml-1 text-amber">incl. {corrections} self-correction{corrections === 1 ? "" : "s"}</span>
               )}
@@ -207,7 +235,7 @@ function RunBlock({
               </span>
             </summary>
             <div className="space-y-3 border-t border-border p-3">
-              {state.feed.map((item) => (
+              {traceFeed.map((item) => (
                 <FeedCard key={item.id} item={item} />
               ))}
             </div>
