@@ -51,7 +51,7 @@ export default async function DatasetsPage() {
   });
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-8">
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
       <PageHeader
         title="Datasets"
         subtitle="Upload CSV or Excel files, then start a conversation to analyze them."
@@ -74,8 +74,8 @@ export default async function DatasetsPage() {
           )}
         </div>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-border bg-panel">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto rounded-2xl border border-border bg-panel">
+          <table className="w-full min-w-[40rem] text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted">
                 <th className="px-4 py-3 font-medium">Name</th>

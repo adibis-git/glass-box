@@ -12,7 +12,7 @@ export default async function AuditPage() {
 
   if (!isAdmin) {
     return (
-      <div className="mx-auto max-w-4xl px-6 py-8">
+      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
         <PageHeader title="Audit log" />
         <div className="rounded-2xl border border-border bg-panel p-8 text-center text-sm text-muted">
           The audit log is visible to admins and owners only.
@@ -35,16 +35,16 @@ export default async function AuditPage() {
   const nameOf = new Map(actors.map((m) => [m.user.id, m.user.name ?? m.user.email]));
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-8">
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
       <PageHeader
         title="Audit log"
         subtitle="Every security-relevant action in this workspace — uploads, analyses, role changes, deletions, guardrail blocks."
       />
-      <div className="overflow-hidden rounded-2xl border border-border bg-panel">
+      <div className="overflow-x-auto rounded-2xl border border-border bg-panel">
         {logs.length === 0 ? (
           <div className="p-8 text-center text-sm text-muted">No activity yet.</div>
         ) : (
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[44rem] text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted">
                 <th className="px-4 py-3 font-medium">When</th>

@@ -30,7 +30,7 @@ export default async function DatasetPage({ params }: { params: Promise<{ id: st
     : `v${d.version} · ${d.originalFilename}${d.sheetName ? ` · sheet: ${d.sheetName}` : ""} · ${sizeMb}${d.rowCount ? ` · ${fmtInt(d.rowCount)} rows` : ""}${d.sampled ? " · representative sample" : ""}`;
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-8">
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
       <PageHeader title={source.name} subtitle={subtitle} />
       <DatasetDetail
         orgId={org.id}

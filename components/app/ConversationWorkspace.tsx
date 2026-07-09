@@ -25,6 +25,8 @@ import {
   ArrowUpCircle,
   Check,
   Share2,
+  Send,
+  FileText,
 } from "lucide-react";
 
 type Role = "OWNER" | "ADMIN" | "MEMBER" | "VIEWER";
@@ -461,63 +463,86 @@ export function ConversationWorkspace({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="border-b border-border bg-panel/60 px-6 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="truncate text-sm font-semibold text-foreground">{conversation.title}</h1>
-            <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+      {/* Header — compact, sticky at the top of the column */}
+      <header className="sticky top-0 z-10 shrink-0 border-b border-border bg-background/85 px-4 py-3 backdrop-blur-sm sm:px-6">
+        <div className="mx-auto max-w-3xl">
+          {/* Title row */}
+          <div className="flex items-center justify-between gap-3">
+            <h1 className="truncate text-base font-semibold tracking-tight text-foreground">
+              {conversation.title}
+            </h1>
+            {running && (
+              <span className="flex shrink-0 items-center gap-1.5 text-xs text-accent">
+                <Loader2 size={13} className="animate-spin" />
+                <span className="hidden sm:inline">analyzing</span>
+              </span>
+            )}
+          </div>
+
+          {/* Chips row — source badges + persona pill, wraps gracefully */}
+          {(conversation.datasets.length > 0 || personaLabel || domain) && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
               {conversation.datasets.map((d) => (
                 <span
                   key={d.alias}
-                  className="rounded border border-border bg-panel-2 px-1.5 py-0.5 font-mono text-[10px] text-foreground/75"
-                  title={`${d.name}${d.rowCount ? ` · ${fmtInt(d.rowCount)} rows` : ""}`}
+                  className="inline-flex h-6 max-w-full items-center gap-1 rounded-md border border-border bg-panel-2 px-2 font-mono text-[11px] leading-none text-foreground/80"
+                  title={`${d.alias} = ${d.name}${d.version ? ` v${d.version}` : ""}${d.rowCount ? ` · ${fmtInt(d.rowCount)} rows` : ""}${d.sampled ? " · sample" : ""}`}
                 >
-                  {d.alias} = {d.name}
-                  {d.version ? <span className="text-muted"> v{d.version}</span> : null}
-                  {d.sampled && <span className="text-amber"> (sample)</span>}
+                  <span className="text-muted">{d.alias}</span>
+                  <span className="text-muted/50">=</span>
+                  <span className="truncate text-foreground/85">{d.name}</span>
+                  {d.version ? <span className="shrink-0 text-muted">v{d.version}</span> : null}
+                  {d.sampled && <span className="shrink-0 text-amber">(sample)</span>}
                 </span>
               ))}
+              {personaLabel && (
+                <span className="inline-flex h-6 items-center gap-1 rounded-md border border-accent/40 bg-accent/10 px-2 text-[11px] leading-none text-accent">
+                  <Sparkles size={11} className="shrink-0" />
+                  {personaLabel}
+                </span>
+              )}
+              {domain && (
+                <span
+                  className="inline-flex h-6 max-w-[16rem] items-center rounded-md border border-border bg-panel-2/60 px-2 text-[11px] leading-none text-muted"
+                  title={`Context: ${domain}`}
+                >
+                  <span className="truncate">Context: {domain}</span>
+                </span>
+              )}
             </div>
-          </div>
-          {running && (
-            <span className="flex shrink-0 items-center gap-1.5 text-xs text-accent">
-              <Loader2 size={13} className="animate-spin" />
-              analyzing
-            </span>
+          )}
+
+          {/* Document context — condensed, truncated single line per doc */}
+          {documents && documents.length > 0 && (
+            <div className="mt-2 space-y-1">
+              {documents.map((d) => {
+                const meta = `${d.pageCount} page${d.pageCount === 1 ? "" : "s"} · ${fmtInt(d.wordCount)} words · ${d.sectionCount} section${d.sectionCount === 1 ? "" : "s"}`;
+                const full = `${d.name} · ${meta}${d.description ? ` — ${d.description}` : ""}`;
+                return (
+                  <div
+                    key={d.name}
+                    className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted"
+                    title={full}
+                  >
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded border border-blue/30 bg-blue/10 px-1.5 py-0.5 uppercase tracking-wide text-blue">
+                      <FileText size={10} className="shrink-0" />
+                      {d.docType}
+                    </span>
+                    <span className="truncate">
+                      <span className="text-foreground/80">{d.name}</span>
+                      <span className="text-muted/80"> · {meta}</span>
+                      {d.description && <span className="text-muted/70"> — {d.description}</span>}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
-        {(personaLabel || domain) && (
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
-            {personaLabel && (
-              <span className="rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-accent">
-                {personaLabel}
-              </span>
-            )}
-            {domain && <span className="truncate">Context: {domain}</span>}
-          </div>
-        )}
-        {documents && documents.length > 0 && (
-          <div className="mt-1.5 space-y-1">
-            {documents.map((d) => (
-              <div key={d.name} className="flex flex-wrap items-baseline gap-1.5 text-[11px] text-muted">
-                <span className="rounded border border-blue/30 bg-blue/10 px-1.5 py-0.5 uppercase tracking-wide text-blue">
-                  {d.docType}
-                </span>
-                <span className="text-foreground/80">{d.name}</span>
-                <span>
-                  {d.pageCount} page{d.pageCount === 1 ? "" : "s"} · {fmtInt(d.wordCount)} words ·{" "}
-                  {d.sectionCount} section{d.sectionCount === 1 ? "" : "s"}
-                </span>
-                {d.description && <span className="w-full truncate text-muted/90">{d.description}</span>}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      </header>
 
       {/* Runs */}
-      <div className="flex-1 overflow-y-auto px-6 py-6">
+      <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
         <CitationProvider value={scrollToCitation}>
         <div className="mx-auto max-w-3xl space-y-8">
           {/* Newer-version banners: one per pinned source with a live update */}
@@ -629,49 +654,66 @@ export function ConversationWorkspace({
         </CitationProvider>
       </div>
 
-      {/* Ask bar */}
-      <div className="border-t border-border bg-panel/60 px-6 py-3">
-        <div className="mx-auto flex max-w-3xl items-center gap-2">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") ask();
-            }}
-            placeholder={
-              canAsk
-                ? hasAnyRun
-                  ? "Ask a follow-up question about this data…"
-                  : "What do you want to know about this data?"
-                : "Viewers can read analyses but not run them."
-            }
-            disabled={!canAsk || running}
-            className="h-10 flex-1 rounded-xl border border-border bg-panel-2 px-4 text-sm text-foreground placeholder:text-muted/60 outline-none focus:border-accent/60 disabled:opacity-50"
-          />
-          <label className="flex items-center gap-1.5 text-[11px] text-muted" title="Analysis depth — deeper takes longer">
-            <span className="hidden sm:inline">Depth</span>
-            <select
-              value={effort}
-              onChange={(e) => setEffort(e.target.value as AnalysisEffort)}
+      {/* Ask bar — polished, sticky footer */}
+      <footer className="sticky bottom-0 shrink-0 border-t border-border bg-background/85 px-4 py-3 backdrop-blur-sm sm:px-6">
+        <div className="mx-auto max-w-3xl">
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-panel px-2 py-1.5 shadow-sm transition focus-within:border-accent/50 focus-within:ring-1 focus-within:ring-accent/30">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") ask();
+              }}
+              placeholder={
+                canAsk
+                  ? hasAnyRun
+                    ? "Ask a follow-up question about this data…"
+                    : "What do you want to know about this data?"
+                  : "Viewers can read analyses but not run them."
+              }
               disabled={!canAsk || running}
-              className="h-10 rounded-xl border border-border bg-panel-2 px-2 text-xs text-foreground outline-none focus:border-accent/60 disabled:opacity-50"
-            >
-              {EFFORT_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Button variant="primary" onClick={() => ask()} disabled={!canAsk || running || !input.trim()}>
-            {running ? "Analyzing…" : "Ask"}
-          </Button>
+              className="h-9 min-w-0 flex-1 basis-full bg-transparent px-2 text-sm text-foreground placeholder:text-muted/60 outline-none disabled:opacity-50 sm:basis-0"
+            />
+            <div className="ml-auto flex items-center gap-1.5">
+              <label
+                className="flex items-center gap-1.5 text-[11px] text-muted"
+                title="Analysis depth — deeper takes longer"
+              >
+                <span className="hidden sm:inline">Depth</span>
+                <select
+                  value={effort}
+                  onChange={(e) => setEffort(e.target.value as AnalysisEffort)}
+                  disabled={!canAsk || running}
+                  className="h-9 rounded-lg border border-border bg-panel-2 px-2 text-xs text-foreground outline-none focus:border-accent/60 disabled:opacity-50"
+                >
+                  {EFFORT_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Button
+                variant="primary"
+                onClick={() => ask()}
+                disabled={!canAsk || running || !input.trim()}
+                className="h-9 gap-1.5 rounded-lg"
+              >
+                {running ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <Send size={15} />
+                )}
+                {running ? "Analyzing…" : "Ask"}
+              </Button>
+            </div>
+          </div>
+          <p className="mt-2 text-center text-[10px] leading-relaxed text-muted">
+            The agent answers only from the datasets in this conversation. Schema, a 20-row sample,
+            and printed outputs are sent to the model — never the full file. Every run is audited.
+          </p>
         </div>
-        <p className="mx-auto mt-1.5 max-w-3xl text-[10px] text-muted">
-          The agent answers only from the datasets in this conversation. Schema, a 20-row sample,
-          and printed outputs are sent to the model — never the full file. Every run is audited.
-        </p>
-      </div>
+      </footer>
     </div>
   );
 }

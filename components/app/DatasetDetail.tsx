@@ -380,8 +380,8 @@ function VersionsPanel({
         )}
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-border">
-        <table className="w-full text-xs">
+      <div className="overflow-x-auto rounded-xl border border-border">
+        <table className="w-full min-w-[36rem] text-xs">
           <thead>
             <tr className="border-b border-border text-left uppercase tracking-wide text-muted">
               <th className="px-3 py-2 font-medium">Version</th>

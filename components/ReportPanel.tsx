@@ -50,7 +50,7 @@ export function ReportPanel({ report }: { report: FinalReport }) {
         )}
 
         {report.metrics.length > 0 && (
-          <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+          <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
             {report.metrics.map((m, i) => (
               <MetricCard key={i} metric={m} />
             ))}
@@ -118,7 +118,7 @@ export function ReportComposing() {
       </div>
       <div className="space-y-2.5">
         <div className="h-5 w-3/4 animate-pulse rounded bg-border" />
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
             <div key={i} className="h-16 animate-pulse rounded-xl bg-border/60" />
           ))}

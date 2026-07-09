@@ -137,7 +137,7 @@ export function MembersManager({
               </div>
               <div className="truncate text-xs text-muted">{m.email}</div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               {isAdmin && m.userId !== myUserId ? (
                 <>
                   <select

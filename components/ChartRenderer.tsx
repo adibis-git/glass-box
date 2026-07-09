@@ -251,12 +251,14 @@ export function ChartRenderer({ spec }: { spec: ChartSpec }) {
   }
 
   return (
-    <div className="gb-in rounded-2xl border border-border bg-panel p-4 shadow-sm">
+    <div className="gb-in overflow-hidden rounded-2xl border border-border bg-panel p-4 shadow-sm">
       <div className="mb-3 flex items-center gap-2">
         <span className="h-2.5 w-2.5 rounded-sm" style={{ background: PALETTE[0] }} />
-        <span className="text-sm font-semibold text-foreground">{spec.title}</span>
+        <span className="truncate text-sm font-semibold text-foreground">{spec.title}</span>
       </div>
-      <div ref={ref} className="w-full" style={{ height: HEIGHT }}>
+      {/* Width is measured from this container (responsive); height is fixed so
+          the chart keeps a sensible min-height on small screens. */}
+      <div ref={ref} className="w-full" style={{ height: HEIGHT, minHeight: HEIGHT }}>
         {renderChart()}
       </div>
     </div>
