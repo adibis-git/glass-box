@@ -18,6 +18,7 @@ export type FeedItem =
       timedOut?: boolean;
     }
   | { kind: "cite"; id: string; anchor: string; quote: string; section?: string }
+  | { kind: "extract"; id: string; title: string; columns: string[]; rows: string[][] }
   | { kind: "verification"; id: string; ok: boolean; issues: string[] }
   | { kind: "insight"; id: string; report: FinalReport };
 
@@ -145,6 +146,21 @@ export function feedReducer(state: FeedState, action: FeedAction): FeedState {
             anchor: action.anchor,
             quote: action.quote,
             section: action.section,
+          },
+        ],
+      };
+
+    case "extract":
+      return {
+        ...state,
+        feed: [
+          ...state.feed,
+          {
+            kind: "extract",
+            id: action.id,
+            title: action.title,
+            columns: action.columns,
+            rows: action.rows,
           },
         ],
       };

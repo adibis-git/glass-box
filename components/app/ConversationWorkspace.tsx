@@ -10,6 +10,8 @@ import { FeedCard } from "@/components/FeedCard";
 import { ReportPanel, ReportComposing } from "@/components/ReportPanel";
 import { ChartRenderer } from "@/components/ChartRenderer";
 import { Button } from "@/components/ui/Button";
+import { CitationProvider, type ScrollToCitation } from "@/components/app/SourceDocContext";
+import { SourceDocumentPanel, type CiteTarget } from "@/components/app/SourceDocumentPanel";
 import type { AnalysisEffort } from "@/lib/generated/prisma/enums";
 
 type Role = "OWNER" | "ADMIN" | "MEMBER" | "VIEWER";
@@ -222,12 +224,22 @@ function RunBlock({
 }
 
 interface DocSummary {
+  sourceId: string;
+  version: number;
   name: string;
   docType: string;
   description: string;
   pageCount: number;
   wordCount: number;
   sectionCount: number;
+}
+
+/** A pinned source that has a newer live version available to adopt (v3 §15.1). */
+export interface SourceUpdate {
+  sourceId: string;
+  name: string;
+  pinnedVersion: number;
+  latestVersion: number;
 }
 
 export function ConversationWorkspace({
@@ -237,6 +249,7 @@ export function ConversationWorkspace({
   personaLabel,
   domain,
   documents,
+  sourceUpdates,
 }: {
   orgId: string;
   myRole: Role;
@@ -244,9 +257,48 @@ export function ConversationWorkspace({
   personaLabel?: string | null;
   domain?: string | null;
   documents?: DocSummary[];
+  sourceUpdates?: SourceUpdate[];
 }) {
   const router = useRouter();
   const canAsk = myRole !== "VIEWER";
+
+  // The primary document backing this conversation (if any) powers the
+  // click-to-scroll "Source document" panel and citation jumps.
+  const primaryDoc = documents && documents.length > 0 ? documents[0] : null;
+  const [docPanelOpen, setDocPanelOpen] = useState(false);
+  const [citeTarget, setCiteTarget] = useState<CiteTarget | null>(null);
+  const citeNonce = useRef(0);
+
+  const scrollToCitation = useMemo<ScrollToCitation | null>(() => {
+    if (!primaryDoc) return null;
+    return (anchor, quote, section) => {
+      setDocPanelOpen(true);
+      citeNonce.current += 1;
+      setCiteTarget({ anchor, quote, section, nonce: citeNonce.current });
+    };
+  }, [primaryDoc]);
+
+  // Adopt a newer version of a pinned source into this conversation.
+  const [adopting, setAdopting] = useState<string | null>(null);
+  const [dismissedUpdates, setDismissedUpdates] = useState<Set<string>>(() => new Set());
+  async function adopt(sourceId: string, version: number) {
+    if (adopting) return;
+    setAdopting(sourceId);
+    try {
+      const res = await fetch(`/api/orgs/${orgId}/conversations/${conversation.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceId, version }),
+      });
+      if (res.ok) {
+        setDismissedUpdates((prev) => new Set(prev).add(sourceId));
+        router.refresh();
+      }
+    } finally {
+      setAdopting(null);
+    }
+  }
+  const pendingUpdates = (sourceUpdates ?? []).filter((u) => !dismissedUpdates.has(u.sourceId));
 
   // Persisted runs: pair USER question → following ASSISTANT events.
   const persistedRuns = useMemo(() => {
@@ -387,7 +439,49 @@ export function ConversationWorkspace({
 
       {/* Runs */}
       <div className="flex-1 overflow-y-auto px-6 py-6">
+        <CitationProvider value={scrollToCitation}>
         <div className="mx-auto max-w-3xl space-y-8">
+          {/* Newer-version banners: one per pinned source with a live update */}
+          {pendingUpdates.length > 0 && (
+            <div className="space-y-2">
+              {pendingUpdates.map((u) => (
+                <div
+                  key={u.sourceId}
+                  className="flex flex-wrap items-center gap-2 rounded-xl border border-blue/40 bg-blue/10 px-4 py-2.5 text-sm text-blue"
+                >
+                  <span className="text-base">⬆️</span>
+                  <span className="text-foreground/90">
+                    A newer version (v{u.latestVersion}) of{" "}
+                    <span className="font-medium">{u.name}</span> is available — you&apos;re on v
+                    {u.pinnedVersion}.
+                  </span>
+                  {canAsk && (
+                    <button
+                      onClick={() => adopt(u.sourceId, u.latestVersion)}
+                      disabled={adopting === u.sourceId}
+                      className="ml-auto rounded-lg border border-blue/50 bg-blue/15 px-3 py-1 text-xs font-medium text-blue hover:bg-blue/25 disabled:opacity-50"
+                    >
+                      {adopting === u.sourceId ? "Adopting…" : "Adopt"}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Collapsible source document — scroll target for citation clicks */}
+          {primaryDoc && (
+            <SourceDocumentPanel
+              orgId={orgId}
+              sourceId={primaryDoc.sourceId}
+              version={primaryDoc.version}
+              name={primaryDoc.name}
+              open={docPanelOpen}
+              onToggle={setDocPanelOpen}
+              cite={citeTarget}
+            />
+          )}
+
           {!hasAnyRun && (
             <div className="rounded-2xl border border-dashed border-border bg-panel/50 p-10 text-center">
               <div className="mb-3 text-4xl">🔎</div>
@@ -441,6 +535,7 @@ export function ConversationWorkspace({
 
           <div ref={endRef} />
         </div>
+        </CitationProvider>
       </div>
 
       {/* Ask bar */}

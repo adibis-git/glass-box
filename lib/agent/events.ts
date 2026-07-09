@@ -20,6 +20,20 @@ export type AgentEvent =
   | { type: "chart"; id: string; spec: ChartSpec }
   | {
       /**
+       * A structured list compiled by the document engine's `extract` tool
+       * (v3 §14.3) — e.g. every requirement, obligation, or price pulled from the
+       * document. Emitted so the UI can render it as a table and offer a CSV
+       * download; the same result is still fed back to the model. `rows` are
+       * stringified and column-aligned to `columns`.
+       */
+      type: "extract";
+      id: string;
+      title: string;
+      columns: string[];
+      rows: string[][];
+    }
+  | {
+      /**
        * A citation recorded by the document engine — the doc-mode "glass box"
        * equivalent of showing executed Python (v3 §14.3). `anchor` is the token
        * the model echoed from a retrieved passage; `section` is its nearest

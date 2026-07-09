@@ -6,6 +6,7 @@ import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import type { FeedItem } from "@/lib/feed";
 import type { Confidence } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useCitationScroll } from "@/components/app/SourceDocContext";
 
 // --- tiny inline markdown (bold + inline code), enough for the plan text ---
 function renderInline(text: string, keyBase: string): React.ReactNode[] {
@@ -102,7 +103,105 @@ const confidenceStyle: Record<Confidence, string> = {
   low: "bg-muted/15 text-muted border-muted/30",
 };
 
+// --- extract: a structured table the document engine pulled from a source ---
+// The `extract` FeedItem shape is owned by lib/feed.ts (a concurrent worker);
+// read it defensively so this renders whether or not the union lists it yet.
+interface ExtractFeedItem {
+  kind: "extract";
+  id: string;
+  title: string;
+  columns: string[];
+  rows: string[][];
+}
+
+function asExtract(item: FeedItem): ExtractFeedItem | null {
+  const probe = item as unknown as { kind?: unknown; columns?: unknown; rows?: unknown };
+  if (probe.kind !== "extract") return null;
+  if (!Array.isArray(probe.columns) || !Array.isArray(probe.rows)) return null;
+  return item as unknown as ExtractFeedItem;
+}
+
+function toCsv(columns: string[], rows: string[][]): string {
+  const esc = (v: unknown) => {
+    const s = v == null ? "" : String(v);
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return [columns, ...rows].map((r) => r.map(esc).join(",")).join("\r\n");
+}
+
+function downloadCsv(filename: string, csv: string): void {
+  const blob = new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function slugify(s: string): string {
+  return s.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "extract";
+}
+
+function ExtractCard({ item }: { item: ExtractFeedItem }) {
+  const { title, columns, rows } = item;
+  return (
+    <CardShell icon="📊" label={`Extracted table${title ? ` · ${title}` : ""}`}>
+      <div className="mb-2.5 flex items-center justify-between gap-2">
+        <span className="text-[11px] text-muted">
+          {rows.length} row{rows.length === 1 ? "" : "s"} · {columns.length} column
+          {columns.length === 1 ? "" : "s"}
+        </span>
+        <button
+          onClick={() => downloadCsv(`${slugify(title)}.csv`, toCsv(columns, rows))}
+          className="rounded-lg border border-border bg-panel-2 px-2.5 py-1 text-[11px] font-medium text-foreground/80 hover:border-accent/50 hover:text-accent"
+        >
+          ⬇ Download CSV
+        </button>
+      </div>
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <table className="w-full border-collapse text-xs">
+          <thead>
+            <tr className="bg-panel-2">
+              {columns.map((c, i) => (
+                <th
+                  key={i}
+                  className="border-b border-border px-2.5 py-1.5 text-left font-semibold text-foreground/80 whitespace-nowrap"
+                >
+                  {c}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, ri) => (
+              <tr key={ri} className="odd:bg-panel/40">
+                {columns.map((_, ci) => (
+                  <td
+                    key={ci}
+                    className="border-b border-border/60 px-2.5 py-1.5 align-top text-foreground/80"
+                  >
+                    {row[ci] ?? ""}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </CardShell>
+  );
+}
+
 export function FeedCard({ item }: { item: FeedItem }) {
+  const scrollToCite = useCitationScroll();
+
+  // `extract` items are produced by the reducer; render as an exportable table.
+  const extract = asExtract(item);
+  if (extract) return <ExtractCard item={extract} />;
+
   switch (item.kind) {
     case "plan":
       return (
@@ -210,17 +309,44 @@ export function FeedCard({ item }: { item: FeedItem }) {
       );
     }
 
-    case "cite":
+    case "cite": {
+      const cite = item;
+      const clickable = !!scrollToCite;
       return (
-        <CardShell icon="📑" label={`Citation${item.section ? ` · ${item.section}` : ""}`}>
-          <blockquote className="border-l-2 border-accent/60 pl-3 text-sm italic leading-relaxed text-foreground/90">
-            “{item.quote}”
-          </blockquote>
-          <div className="mt-2 font-mono text-[10px] uppercase tracking-wide text-muted">
-            anchor {item.anchor}
+        <CardShell
+          icon="📑"
+          label={`Citation${cite.section ? ` · ${cite.section}` : ""}`}
+          className={cn(
+            clickable &&
+              "cursor-pointer transition-colors hover:border-accent/50 hover:bg-panel-2/60",
+          )}
+        >
+          <div
+            role={clickable ? "button" : undefined}
+            tabIndex={clickable ? 0 : undefined}
+            onClick={clickable ? () => scrollToCite(cite.anchor, cite.quote, cite.section) : undefined}
+            onKeyDown={
+              clickable
+                ? (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      scrollToCite(cite.anchor, cite.quote, cite.section);
+                    }
+                  }
+                : undefined
+            }
+          >
+            <blockquote className="border-l-2 border-accent/60 pl-3 text-sm italic leading-relaxed text-foreground/90">
+              “{cite.quote}”
+            </blockquote>
+            <div className="mt-2 flex items-center justify-between font-mono text-[10px] uppercase tracking-wide text-muted">
+              <span>anchor {cite.anchor}</span>
+              {clickable && <span className="text-accent/80">jump to source ↧</span>}
+            </div>
           </div>
         </CardShell>
       );
+    }
 
     case "verification": {
       const passed = item.ok;

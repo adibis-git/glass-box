@@ -256,6 +256,7 @@ model Message {
   suggestions    Json? // follow-up question chips for this assistant turn (v3 §5)
   effort         AnalysisEffort? // effort this run used (v3 §16.4)
   intent         String? // classified intent: quick_fact|analytical|decision (v3 §6)
+  modality       String? // "tabular"|"document" — which worker ran (mixed-convo history scoping)
   inputTokens    Int         @default(0)
   outputTokens   Int         @default(0)
   status         RunStatus   @default(DONE)

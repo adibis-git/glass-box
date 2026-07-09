@@ -6,8 +6,9 @@ import { prisma } from "@/lib/db";
 import { authorize, authzErrorResponse } from "@/lib/authz";
 import { checkRateLimit, rateLimitResponse } from "@/lib/ratelimit";
 import { audit } from "@/lib/audit";
-import { runAgentTurn, type RunnerDataset } from "@/server/agent/runner";
-import { runDocumentTurn, type DocumentRef } from "@/server/agent/documentEngine";
+import { type RunnerDataset } from "@/server/agent/runner";
+import { type DocumentRef } from "@/server/agent/documentEngine";
+import { runCoordinatedTurn, decideModality } from "@/server/agent/coordinator";
 import { getStorage } from "@/server/storage";
 import type { ChatMessage, ContentBlock } from "@/lib/types";
 import { isDocProfile, type ColumnProfile, type DatasetDomain, type DocProfile } from "@/lib/agent/context";
@@ -93,37 +94,38 @@ export async function POST(req: Request, { params }: Params) {
     return Response.json({ error: "A run is already in progress for this conversation." }, { status: 409 });
   }
 
-  // Route by modality: a conversation whose pinned sources are all DOCUMENT runs
-  // the document engine; otherwise the tabular runner (unchanged). Mixed
-  // conversations fall through to the tabular path (documents ignored).
+  // Build BOTH modalities from the pinned sources and let the coordinator select
+  // the worker(s). A conversation can now be tabular-only, document-only, OR
+  // MIXED (both kinds pinned) — the coordinator routes per question instead of
+  // the old "all-document → doc engine, else tabular (documents ignored)" split.
   const docLinks = conversation.sources.filter((l) => l.source.kind === "DOCUMENT");
-  const isDocument = docLinks.length > 0 && docLinks.length === conversation.sources.length;
+  const tabularLinks = conversation.sources.filter((l) => l.source.kind !== "DOCUMENT");
 
-  const datasets: RunnerDataset[] = isDocument
-    ? []
-    : conversation.sources
-        .filter((l) => l.source.kind !== "DOCUMENT")
-        .map((l) => {
-          const v = l.version; // the pinned SourceVersion (v3 §2)
-          const raw = v.profile as { columns?: ColumnProfile[]; domain?: DatasetDomain } | null;
-          const profile =
-            raw && Array.isArray(raw.columns) ? { columns: raw.columns, domain: raw.domain } : undefined;
-          return {
-            versionId: v.id,
-            alias: l.alias,
-            storageKey: v.storageKey,
-            name: l.source.name,
-            rowCount: v.rowCount,
-            sampled: v.sampled,
-            columnSchema: (v.columnSchema as { name: string; dtype: string }[]) ?? [],
-            sampleRows: (v.sampleRows as Record<string, unknown>[]) ?? [],
-            profile,
-          };
-        });
+  const datasets: RunnerDataset[] = tabularLinks.map((l) => {
+    const v = l.version; // the pinned SourceVersion (v3 §2)
+    const raw = v.profile as { columns?: ColumnProfile[]; domain?: DatasetDomain } | null;
+    const profile =
+      raw && Array.isArray(raw.columns) ? { columns: raw.columns, domain: raw.domain } : undefined;
+    return {
+      versionId: v.id,
+      alias: l.alias,
+      storageKey: v.storageKey,
+      name: l.source.name,
+      rowCount: v.rowCount,
+      sampled: v.sampled,
+      columnSchema: (v.columnSchema as { name: string; dtype: string }[]) ?? [],
+      sampleRows: (v.sampleRows as Record<string, unknown>[]) ?? [],
+      profile,
+    };
+  });
 
-  // For document conversations, load the extracted text for each pinned version.
+  if (datasets.some((d) => !d.storageKey)) {
+    return Response.json({ error: "A dataset in this conversation isn't ready." }, { status: 409 });
+  }
+
+  // Load the extracted text for each pinned document version.
   let documents: DocumentRef[] = [];
-  if (isDocument) {
+  if (docLinks.length > 0) {
     if (docLinks.some((l) => l.version.status !== "READY")) {
       return Response.json({ error: "A document in this conversation isn't ready." }, { status: 409 });
     }
@@ -147,12 +149,17 @@ export async function POST(req: Request, { params }: Params) {
     } catch {
       return Response.json({ error: "Could not load a document's extracted text." }, { status: 409 });
     }
-  } else if (datasets.some((d) => !d.storageKey)) {
-    return Response.json({ error: "A dataset in this conversation isn't ready." }, { status: 409 });
   }
 
+  // Decide the worker up front so we can scope history to the same modality.
+  const isMixed = tabularLinks.length > 0 && docLinks.length > 0;
+  const modality = decideModality(question, datasets, documents);
   const priorRuns = conversation.messages
     .filter((m) => m.role === "ASSISTANT" && Array.isArray(m.apiMessages))
+    // In a MIXED conversation, only carry history from the SAME modality — a
+    // tabular turn must not inherit a prior document turn's "no dataframe loaded"
+    // context (and vice-versa). Legacy turns (null modality) are kept.
+    .filter((m) => !isMixed || !m.modality || m.modality === modality)
     .map((m) => m.apiMessages as unknown as ChatMessage[]);
   const history = compactHistory(priorRuns);
   const isFollowUp = priorRuns.length > 0;
@@ -175,7 +182,7 @@ export async function POST(req: Request, { params }: Params) {
     metadata: {
       messageId: assistantMsg.id,
       question: question.slice(0, 200),
-      datasets: (isDocument ? documents : datasets).map((d) => d.alias),
+      datasets: [...datasets, ...documents].map((d) => d.alias),
     },
     req,
   });
@@ -206,33 +213,24 @@ export async function POST(req: Request, { params }: Params) {
 
       send("meta", { messageId: assistantMsg.id });
 
-      const result = isDocument
-        ? await runDocumentTurn({
-            conversationId: id,
-            question,
-            documents,
-            history,
-            isFollowUp,
-            persona: membership?.persona ?? null,
-            org: { domain: conversation.org.domain, vertical: conversation.org.vertical },
-            effort,
-            emit: (e) => send(e.type, e),
-            signal: abort.signal,
-          })
-        : await runAgentTurn({
-            conversationId: id,
-            question,
-            datasets,
-            history,
-            isFollowUp,
-            persona: membership?.persona ?? null,
-            org: { domain: conversation.org.domain, vertical: conversation.org.vertical },
-            effort,
-            emit: (e) => send(e.type, e),
-            // The run continues even if the client disconnects; it settles and
-            // persists so the user can reload. Only explicit cancel aborts.
-            signal: abort.signal,
-          });
+      // The coordinator selects the tabular / document worker(s) by the loaded
+      // source modalities + (for mixed conversations) the question. The run
+      // continues even if the client disconnects; it settles and persists so the
+      // user can reload. Only explicit cancel aborts.
+      const result = await runCoordinatedTurn({
+        conversationId: id,
+        question,
+        datasets,
+        documents,
+        modality,
+        history,
+        isFollowUp,
+        persona: membership?.persona ?? null,
+        org: { domain: conversation.org.domain, vertical: conversation.org.vertical },
+        effort,
+        emit: (e) => send(e.type, e),
+        signal: abort.signal,
+      });
 
       await prisma.message.update({
         where: { id: assistantMsg.id },
@@ -242,6 +240,7 @@ export async function POST(req: Request, { params }: Params) {
           report: (result.report ?? undefined) as unknown as Prisma.InputJsonValue,
           suggestions: (result.suggestions ?? undefined) as unknown as Prisma.InputJsonValue,
           intent: result.intent,
+          modality,
           effort,
           inputTokens: result.inputTokens,
           outputTokens: result.outputTokens,

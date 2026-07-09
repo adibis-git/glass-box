@@ -81,6 +81,18 @@ function chooseProvider(): { provider: Provider; apiKey: string } {
 let seq = 0;
 const uid = (p: string) => `${p}-${++seq}-${Date.now()}`;
 
+/** Coerce an extract cell to a display string (for the extract event / CSV). */
+function stringifyCell(v: unknown): string {
+  if (v == null) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
+}
+
 const TRANSIENT = (status?: number) => status === 429 || status === 529;
 
 async function withRetry<T>(fn: () => Promise<T>, signal: AbortSignal): Promise<T> {
@@ -407,7 +419,29 @@ export async function runDocumentTurn(input: DocumentRunnerInput): Promise<Runne
           }
         } else if (tu.name === "extract") {
           const title = String(tu.input.title ?? "Extracted list");
-          const rows = Array.isArray(tu.input.rows) ? tu.input.rows : [];
+          const rawRows = Array.isArray(tu.input.rows)
+            ? (tu.input.rows as unknown[])
+            : [];
+          // Columns come from the tool input; fall back to the union of row keys.
+          let columns = Array.isArray(tu.input.columns)
+            ? (tu.input.columns as unknown[]).map((c) => String(c))
+            : [];
+          if (!columns.length) {
+            const keys = new Set<string>();
+            for (const r of rawRows) {
+              if (r && typeof r === "object") for (const k of Object.keys(r)) keys.add(k);
+            }
+            columns = [...keys];
+          }
+          // Stringify + column-align each row so the UI can render a table / CSV.
+          const rows: string[][] = rawRows.map((r) => {
+            const obj = r && typeof r === "object" ? (r as Record<string, unknown>) : {};
+            const cells = columns.length ? columns.map((c) => obj[c]) : Object.values(obj);
+            return cells.map(stringifyCell);
+          });
+          // Emit the structured list for the feed (render + CSV download) AND keep
+          // feeding the compiled result back to the model as before.
+          emit({ type: "extract", id: uid("extract"), title, columns, rows });
           toolResults.push({
             type: "tool_result",
             tool_use_id: tu.id,

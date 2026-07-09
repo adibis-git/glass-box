@@ -46,6 +46,8 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
     .map((l) => {
       const p = l.version.profile as unknown as DocProfile;
       return {
+        sourceId: l.source.id,
+        version: l.version.version,
         name: l.source.name,
         docType: p.docType,
         description: p.description,
@@ -55,6 +57,31 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
       };
     });
 
+  // Adopt-newer-version (v3 §15.1): per pinned source, is there a newer live
+  // (READY) SourceVersion than the one this conversation pins?
+  const sourceIds = c.sources.map((l) => l.source.id);
+  const latestReady = sourceIds.length
+    ? await prisma.sourceVersion.findMany({
+        where: { sourceId: { in: sourceIds }, status: "READY", deletedAt: null },
+        orderBy: { version: "desc" },
+        distinct: ["sourceId"],
+        select: { sourceId: true, version: true },
+      })
+    : [];
+  const latestBySource = new Map(latestReady.map((v) => [v.sourceId, v.version]));
+  const sourceUpdates = c.sources
+    .map((l) => {
+      const latest = latestBySource.get(l.source.id);
+      if (typeof latest !== "number" || latest <= l.version.version) return null;
+      return {
+        sourceId: l.source.id,
+        name: l.source.name,
+        pinnedVersion: l.version.version,
+        latestVersion: latest,
+      };
+    })
+    .filter((u): u is NonNullable<typeof u> => u !== null);
+
   return (
     <ConversationWorkspace
       orgId={org.id}
@@ -62,6 +89,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
       personaLabel={persona ? PERSONA_FRAMING[persona].label : null}
       domain={orgRow?.domain ?? null}
       documents={documents}
+      sourceUpdates={sourceUpdates}
       conversation={{
         id: c.id,
         title: c.title,
