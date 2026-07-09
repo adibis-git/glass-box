@@ -18,6 +18,7 @@ export type FeedItem =
       timedOut?: boolean;
     }
   | { kind: "cite"; id: string; anchor: string; quote: string; section?: string }
+  | { kind: "verification"; id: string; ok: boolean; issues: string[] }
   | { kind: "insight"; id: string; report: FinalReport };
 
 export type RunStatus = "idle" | "running" | "done" | "error";
@@ -155,6 +156,15 @@ export function feedReducer(state: FeedState, action: FeedAction): FeedState {
         feed: [
           ...state.feed,
           { kind: "notice", id: action.id, tone: action.tone, text: action.text },
+        ],
+      };
+
+    case "verification":
+      return {
+        ...state,
+        feed: [
+          ...state.feed,
+          { kind: "verification", id: action.id, ok: action.ok, issues: action.issues },
         ],
       };
 

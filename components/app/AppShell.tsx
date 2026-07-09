@@ -10,6 +10,7 @@ import type { OrgSummary } from "@/lib/activeOrg";
 const NAV = [
   { href: "/app/datasets", label: "Datasets", icon: "🗂️" },
   { href: "/app/conversations", label: "Conversations", icon: "💬" },
+  { href: "/app/usage", label: "Usage", icon: "📊" },
   { href: "/app/members", label: "Members", icon: "👥" },
   { href: "/app/audit", label: "Audit log", icon: "🧾" },
   { href: "/app/settings", label: "Settings", icon: "⚙️" },
@@ -26,6 +27,9 @@ function OrgSwitcher({ orgs, active }: { orgs: OrgSummary[]; active: OrgSummary 
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [err, setErr] = useState<string | null>(null);
 
   async function switchTo(org: OrgSummary) {
     if (org.id === active.id) return setOpen(false);
@@ -34,6 +38,36 @@ function OrgSwitcher({ orgs, active }: { orgs: OrgSummary[]; active: OrgSummary 
     setOpen(false);
     setBusy(false);
     router.refresh();
+  }
+
+  async function createWorkspace() {
+    const name = newName.trim();
+    if (!name || busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await fetch("/api/orgs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j.org?.id) {
+        setErr(j.error ?? "Could not create workspace.");
+        setBusy(false);
+        return;
+      }
+      // Make the new workspace active (caller is its OWNER), then refresh.
+      await update({ activeOrgId: j.org.id, activeRole: "OWNER" });
+      setNewName("");
+      setCreating(false);
+      setOpen(false);
+      setBusy(false);
+      router.refresh();
+    } catch {
+      setErr("Could not create workspace.");
+      setBusy(false);
+    }
   }
 
   return (
@@ -66,6 +100,52 @@ function OrgSwitcher({ orgs, active }: { orgs: OrgSummary[]; active: OrgSummary 
               <span className="ml-2 text-[10px] uppercase text-muted">{o.role}</span>
             </button>
           ))}
+
+          <div className="border-t border-border">
+            {creating ? (
+              <div className="p-2">
+                <input
+                  autoFocus
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") createWorkspace();
+                    if (e.key === "Escape") setCreating(false);
+                  }}
+                  placeholder="Workspace name"
+                  disabled={busy}
+                  className="h-8 w-full rounded-md border border-border bg-panel-2 px-2 text-sm text-foreground placeholder:text-muted/60 outline-none focus:border-accent/60"
+                />
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    disabled={busy || !newName.trim()}
+                    onClick={createWorkspace}
+                    className="rounded-md bg-accent/20 px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/30 disabled:opacity-50"
+                  >
+                    Create
+                  </button>
+                  <button
+                    disabled={busy}
+                    onClick={() => {
+                      setCreating(false);
+                      setErr(null);
+                    }}
+                    className="rounded-md px-2 py-1 text-xs text-muted hover:text-foreground"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                {err && <div className="mt-1.5 text-[11px] text-red">{err}</div>}
+              </div>
+            ) : (
+              <button
+                onClick={() => setCreating(true)}
+                className="block w-full px-3 py-2 text-left text-sm text-foreground/70 hover:bg-panel-2 hover:text-foreground"
+              >
+                <span className="mr-1.5 text-muted">＋</span> New workspace
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

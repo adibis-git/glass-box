@@ -4,6 +4,7 @@
 
 import { prisma } from "@/lib/db";
 import { authorize, authzErrorResponse } from "@/lib/authz";
+import { checkRateLimit, rateLimitResponse } from "@/lib/ratelimit";
 import { audit } from "@/lib/audit";
 import { runAgentTurn, type RunnerDataset } from "@/server/agent/runner";
 import { runDocumentTurn, type DocumentRef } from "@/server/agent/documentEngine";
@@ -53,6 +54,12 @@ export async function POST(req: Request, { params }: Params) {
     ctx = await authorize(oid, "MEMBER");
   } catch (err) {
     return authzErrorResponse(err) ?? Response.json({ error: "Failed." }, { status: 500 });
+  }
+
+  // Per-org rate limit (v3 §17): cap analysis runs to protect kernel capacity.
+  const rl = checkRateLimit(oid, "messages", 20);
+  if (!rl.ok) {
+    return rateLimitResponse(rl, "Rate limit exceeded: too many analysis runs this minute for this workspace. Please slow down.");
   }
 
   const body = (await req.json().catch(() => ({}))) as { question?: string; effort?: string };

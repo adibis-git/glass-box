@@ -10,6 +10,7 @@ import { runAnthropicTurn, generateAnthropicReport } from "@/lib/agent/providers
 import { runOpenRouterTurn, generateOpenRouterReport } from "@/lib/agent/providers/openrouter";
 import { getKernelRegistry, type DatasetRef } from "@/server/exec/registry";
 import { classifyIntent } from "@/server/agent/scopeGate";
+import { verifyReport } from "@/lib/agent/verifier";
 import { buildSystemPrompt } from "@/lib/agent/systemPrompt";
 import {
   buildContextPack,
@@ -308,6 +309,9 @@ export async function runAgentTurn(input: RunnerInput): Promise<RunnerOutput> {
   let inputTokens = 0;
   let outputTokens = 0;
   let lastExecutionWasError = false;
+  // Printed execution outputs the model saw — the evidence the grounding
+  // verifier checks the final report against (decision runs only).
+  const evidence: string[] = [];
   let runIntent: AnalysisMode = "analytical";
   let followUps: string[] = [];
 
@@ -425,7 +429,7 @@ export async function runAgentTurn(input: RunnerInput): Promise<RunnerOutput> {
         const reportHistory = [...messages];
         if (assistantText.trim()) reportHistory.push({ role: "assistant", content: assistantText });
 
-        const report = await withRetry(
+        let report = await withRetry(
           () =>
             provider === "anthropic"
               ? generateAnthropicReport(reportHistory, apiKey, system, effort)
@@ -433,6 +437,20 @@ export async function runAgentTurn(input: RunnerInput): Promise<RunnerOutput> {
           signal,
         );
         if (signal.aborted) return finish("CANCELLED");
+
+        // Cheap grounding pass (v3 §16.2): one extra LOW-effort call for decision
+        // runs only, so an unsupported headline number can't ship. Fail-soft.
+        if (mode === "decision") {
+          const verdict = await verifyReport({
+            report,
+            evidence: evidence.join("\n\n---\n\n"),
+            question,
+            provider,
+            apiKey,
+          });
+          if (!verdict.ok && verdict.corrected) report = verdict.corrected;
+          emit({ type: "verification", id: uid("verify"), ok: verdict.ok, issues: verdict.issues });
+        }
 
         if (assistantText.trim()) push({ role: "assistant", content: assistantText });
         emit({ type: "report", id: uid("report"), report });
@@ -462,6 +480,7 @@ export async function runAgentTurn(input: RunnerInput): Promise<RunnerOutput> {
             timedOut: res.timedOut,
           });
 
+          evidence.push(res.output);
           let content = res.output;
           if (res.kernelRebuilt && (isFollowUp || turn > 0)) {
             content = `[runtime note: the Python runtime was restarted — earlier in-memory variables are gone; base dataframes are reloaded]\n${content}`;

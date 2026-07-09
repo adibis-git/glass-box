@@ -13,6 +13,7 @@
 import { runAnthropicTurn, generateAnthropicReport } from "@/lib/agent/providers/anthropic";
 import { runOpenRouterTurn, generateOpenRouterReport } from "@/lib/agent/providers/openrouter";
 import { classifyDocumentIntent } from "@/server/agent/scopeGate";
+import { verifyReport } from "@/lib/agent/verifier";
 import { buildDocumentSystemPrompt } from "@/lib/agent/systemPrompt";
 import { DOCUMENT_TOOLS } from "@/lib/agent/documentTools";
 import { retrievePassages, type RetrievableDoc } from "@/lib/agent/documentRetrieval";
@@ -240,6 +241,9 @@ export async function runDocumentTurn(input: DocumentRunnerInput): Promise<Runne
 
   let inputTokens = 0;
   let outputTokens = 0;
+  // Verbatim quotes the model cited — the evidence the grounding verifier checks
+  // the final report against (document_review runs only).
+  const citedQuotes: string[] = [];
   let runIntent: AnalysisMode = "document_review";
   let followUps: string[] = [];
 
@@ -339,7 +343,7 @@ export async function runDocumentTurn(input: DocumentRunnerInput): Promise<Runne
         const reportHistory = [...messages];
         if (assistantText.trim()) reportHistory.push({ role: "assistant", content: assistantText });
 
-        const report = await withRetry(
+        let report = await withRetry(
           () =>
             provider === "anthropic"
               ? generateAnthropicReport(reportHistory, apiKey, system, effort)
@@ -347,6 +351,20 @@ export async function runDocumentTurn(input: DocumentRunnerInput): Promise<Runne
           signal,
         );
         if (signal.aborted) return finish("CANCELLED");
+
+        // Cheap grounding pass (v3 §16.2): one extra LOW-effort call for
+        // document_review runs only, checked against the cited quotes. Fail-soft.
+        if (mode === "document_review") {
+          const verdict = await verifyReport({
+            report,
+            evidence: citedQuotes.join("\n\n---\n\n"),
+            question,
+            provider,
+            apiKey,
+          });
+          if (!verdict.ok && verdict.corrected) report = verdict.corrected;
+          emit({ type: "verification", id: uid("verify"), ok: verdict.ok, issues: verdict.issues });
+        }
 
         if (assistantText.trim()) push({ role: "assistant", content: assistantText });
         emit({ type: "report", id: uid("report"), report });
@@ -370,6 +388,7 @@ export async function runDocumentTurn(input: DocumentRunnerInput): Promise<Runne
           const anchor = String(tu.input.anchor ?? "");
           const quote = String(tu.input.quote ?? "");
           if (anchor && quote) {
+            citedQuotes.push(quote);
             emit({
               type: "cite",
               id: uid("cite"),

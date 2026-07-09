@@ -39,6 +39,17 @@ export type AgentEvent =
       text: string;
     }
   | { type: "report_pending" }
+  | {
+      /**
+       * Grounding-verifier result (v3 §16.2) — a cheap check that every headline
+       * number and key claim in the report is supported by the run's evidence.
+       * Emitted just before the report for decision / document_review runs.
+       */
+      type: "verification";
+      id: string;
+      ok: boolean;
+      issues: string[];
+    }
   | { type: "report"; id: string; report: FinalReport }
   | {
       /** Suggested next-step questions, emitted after the run settles (v3 §5). */

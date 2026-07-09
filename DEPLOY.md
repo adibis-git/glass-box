@@ -137,3 +137,23 @@ docker compose down -v               # stop AND delete all data (danger)
 Each Pyodide kernel holds ~300-700MB RSS; `MAX_KERNELS` caps concurrency (one
 kernel per active conversation, LRU + TTL evicted). This VPS runs other
 projects — check `free -h` before raising it.
+
+## Evals
+`scripts/eval.mjs` is an end-to-end smoke test (no deps beyond Node built-ins +
+`fetch`). It signs up or logs in, uploads `public/samples/sales_prospects.csv`,
+opens a conversation, and asserts the intelligence contract holds:
+- **(a)** a quick-fact question returns **no** report event,
+- **(b)** a decision question **does** return a report event,
+- **(c)** starter questions were generated for the conversation.
+
+```bash
+node scripts/eval.mjs <url>
+# e.g. against the deployed tunnel:
+node scripts/eval.mjs https://<your-tunnel-hostname>.trycloudflare.com
+```
+Optional args/env: `node scripts/eval.mjs <url> [email] [password]`, or
+`BASE_URL` / `EVAL_EMAIL` / `EVAL_PASSWORD`. It prints `PASS`/`FAIL` per check and
+exits non-zero if any check fails, so it drops straight into CI or a post-deploy
+gate. The two runs exercise the live agent, so a model provider must be
+configured (`AGENT_PROVIDER` + key) and the first run pays the one-time kernel
+warm-up.

@@ -4,6 +4,7 @@
 
 import { prisma } from "@/lib/db";
 import { authorize, authzErrorResponse } from "@/lib/authz";
+import { checkRateLimit, rateLimitResponse } from "@/lib/ratelimit";
 import { audit } from "@/lib/audit";
 import { IngestError, CSV_MAX } from "@/server/ingest";
 import { buildVersionData, purgeAtFor } from "@/server/ingest/version";
@@ -60,6 +61,12 @@ export async function POST(req: Request, { params }: Params) {
   const { oid } = await params;
   try {
     const ctx = await authorize(oid, "MEMBER");
+
+    // Per-org rate limit (v3 §17): cap upload bursts per workspace.
+    const rl = checkRateLimit(oid, "datasets", 30);
+    if (!rl.ok) {
+      return rateLimitResponse(rl, "Rate limit exceeded: too many uploads this minute for this workspace. Please slow down.");
+    }
 
     const form = await req.formData();
     const file = form.get("file");

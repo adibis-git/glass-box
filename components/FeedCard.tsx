@@ -222,6 +222,37 @@ export function FeedCard({ item }: { item: FeedItem }) {
         </CardShell>
       );
 
+    case "verification": {
+      const passed = item.ok;
+      const label = passed
+        ? "Grounding check: passed"
+        : `Grounding check: ${item.issues.length} issue${item.issues.length === 1 ? "" : "s"}`;
+      return (
+        <CardShell
+          icon={passed ? "🛡️" : "⚠️"}
+          label={label}
+          labelClass={passed ? "text-green" : "text-amber"}
+          className={passed ? "border-green/25" : "border-amber/40"}
+        >
+          {passed ? (
+            <p className="text-xs text-muted">
+              Every headline number and key claim was checked against the evidence.
+            </p>
+          ) : (
+            <ul className="space-y-1">
+              {item.issues.map((iss, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs text-foreground/80">
+                  <span className="text-amber">•</span>
+                  <span>{iss}</span>
+                </li>
+              ))}
+              <li className="pt-1 text-[11px] text-muted">Unsupported claims were removed or softened.</li>
+            </ul>
+          )}
+        </CardShell>
+      );
+    }
+
     case "insight":
       return (
         <CardShell
