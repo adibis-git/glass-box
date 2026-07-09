@@ -2,6 +2,8 @@
 
 import type { FinalReport, ReportMetric } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { Markdown } from "@/components/Markdown";
+import { ChartColumn, Lightbulb, Loader2 } from "lucide-react";
 
 const trendMeta: Record<NonNullable<ReportMetric["trend"]>, { arrow: string; cls: string }> = {
   up: { arrow: "↑", cls: "text-green" },
@@ -35,7 +37,7 @@ export function ReportPanel({ report }: { report: FinalReport }) {
     <div className="gb-in overflow-hidden rounded-2xl border border-green/30 bg-gradient-to-b from-green/10 via-panel to-panel">
       <div className="p-5">
         <div className="mb-2 flex items-center gap-2">
-          <span className="text-base">📊</span>
+          <ChartColumn size={16} className="text-green" />
           <span className="text-[11px] font-semibold uppercase tracking-wider text-green">
             Final Report
           </span>
@@ -56,7 +58,7 @@ export function ReportPanel({ report }: { report: FinalReport }) {
         )}
 
         {report.summary && (
-          <p className="mt-4 text-sm leading-relaxed text-foreground/85">{report.summary}</p>
+          <Markdown text={report.summary} className="mt-4 text-foreground/85" />
         )}
       </div>
 
@@ -90,7 +92,7 @@ export function ReportPanel({ report }: { report: FinalReport }) {
 
       {report.recommendation && (
         <div className="flex items-start gap-2.5 border-t border-border/70 bg-accent/5 p-5">
-          <span className="text-base">💡</span>
+          <Lightbulb size={16} className="mt-0.5 shrink-0 text-accent" />
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-wider text-accent">
               Recommendation
@@ -109,7 +111,7 @@ export function ReportComposing() {
   return (
     <div className="gb-in rounded-2xl border border-green/30 bg-gradient-to-b from-green/10 to-panel p-5">
       <div className="mb-3 flex items-center gap-2">
-        <span className="gb-pulse text-base">📊</span>
+        <Loader2 size={16} className="animate-spin text-green" />
         <span className="text-[11px] font-semibold uppercase tracking-wider text-green">
           Composing final report…
         </span>

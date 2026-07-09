@@ -7,59 +7,21 @@ import type { FeedItem } from "@/lib/feed";
 import type { Confidence } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useCitationScroll } from "@/components/app/SourceDocContext";
-
-// --- tiny inline markdown (bold + inline code), enough for the plan text ---
-function renderInline(text: string, keyBase: string): React.ReactNode[] {
-  const nodes: React.ReactNode[] = [];
-  const regex = /(\*\*[^*]+\*\*|`[^`]+`)/g;
-  let last = 0;
-  let m: RegExpExecArray | null;
-  let i = 0;
-  while ((m = regex.exec(text)) !== null) {
-    if (m.index > last) nodes.push(text.slice(last, m.index));
-    const tok = m[0];
-    if (tok.startsWith("**")) {
-      nodes.push(
-        <strong key={`${keyBase}-b-${i}`} className="font-semibold text-foreground">
-          {tok.slice(2, -2)}
-        </strong>,
-      );
-    } else {
-      nodes.push(
-        <code
-          key={`${keyBase}-c-${i}`}
-          className="rounded bg-panel-2 px-1 py-0.5 font-mono text-[0.85em] text-accent"
-        >
-          {tok.slice(1, -1)}
-        </code>,
-      );
-    }
-    last = m.index + tok.length;
-    i++;
-  }
-  if (last < text.length) nodes.push(text.slice(last));
-  return nodes;
-}
-
-function Markdown({ text }: { text: string }) {
-  const lines = text.split("\n");
-  return (
-    <div className="space-y-1.5 text-sm leading-relaxed text-foreground/90">
-      {lines.map((line, i) => {
-        const trimmed = line.trim();
-        if (trimmed === "") return null;
-        const bullet = /^([-*]|\d+\.)\s+/.test(trimmed);
-        const content = bullet ? trimmed.replace(/^([-*]|\d+\.)\s+/, "") : trimmed;
-        return (
-          <p key={i} className={cn(bullet && "flex gap-2 pl-1")}>
-            {bullet && <span className="text-accent">•</span>}
-            <span>{renderInline(content, `l${i}`)}</span>
-          </p>
-        );
-      })}
-    </div>
-  );
-}
+import { Markdown } from "@/components/Markdown";
+import {
+  Brain,
+  Ban,
+  Info,
+  RefreshCcw,
+  Code,
+  SquareTerminal,
+  Quote,
+  ShieldCheck,
+  TriangleAlert,
+  ChartColumn,
+  Table,
+  Download,
+} from "lucide-react";
 
 function CardShell({
   icon,
@@ -68,7 +30,7 @@ function CardShell({
   children,
   className,
 }: {
-  icon: string;
+  icon: React.ReactNode;
   label: string;
   labelClass?: string;
   children: React.ReactNode;
@@ -82,7 +44,7 @@ function CardShell({
       )}
     >
       <div className="mb-2.5 flex items-center gap-2">
-        <span className="text-base leading-none">{icon}</span>
+        <span className="flex leading-none">{icon}</span>
         <span
           className={cn(
             "text-[11px] font-semibold uppercase tracking-wider",
@@ -148,7 +110,7 @@ function slugify(s: string): string {
 function ExtractCard({ item }: { item: ExtractFeedItem }) {
   const { title, columns, rows } = item;
   return (
-    <CardShell icon="📊" label={`Extracted table${title ? ` · ${title}` : ""}`}>
+    <CardShell icon={<Table size={15} className="text-muted" />} label={`Extracted table${title ? ` · ${title}` : ""}`}>
       <div className="mb-2.5 flex items-center justify-between gap-2">
         <span className="text-[11px] text-muted">
           {rows.length} row{rows.length === 1 ? "" : "s"} · {columns.length} column
@@ -156,9 +118,10 @@ function ExtractCard({ item }: { item: ExtractFeedItem }) {
         </span>
         <button
           onClick={() => downloadCsv(`${slugify(title)}.csv`, toCsv(columns, rows))}
-          className="rounded-lg border border-border bg-panel-2 px-2.5 py-1 text-[11px] font-medium text-foreground/80 hover:border-accent/50 hover:text-accent"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-panel-2 px-2.5 py-1 text-[11px] font-medium text-foreground/80 hover:border-accent/50 hover:text-accent"
         >
-          ⬇ Download CSV
+          <Download size={12} />
+          Download CSV
         </button>
       </div>
       <div className="overflow-x-auto rounded-lg border border-border">
@@ -205,7 +168,7 @@ export function FeedCard({ item }: { item: FeedItem }) {
   switch (item.kind) {
     case "plan":
       return (
-        <CardShell icon="🧠" label="Plan">
+        <CardShell icon={<Brain size={15} className="text-muted" />} label="Plan">
           <div className={cn(item.streaming && "gb-cursor")}>
             {item.text ? (
               <Markdown text={item.text} />
@@ -227,7 +190,11 @@ export function FeedCard({ item }: { item: FeedItem }) {
           )}
         >
           <div className="flex items-start gap-2.5">
-            <span className="text-base">{item.tone === "warning" ? "🚫" : "ℹ️"}</span>
+            {item.tone === "warning" ? (
+              <Ban size={16} className="mt-0.5 shrink-0 text-amber" />
+            ) : (
+              <Info size={16} className="mt-0.5 shrink-0 text-blue" />
+            )}
             <p className={cn("text-sm leading-relaxed", item.tone === "warning" ? "text-amber" : "text-blue")}>
               {item.text}
             </p>
@@ -239,7 +206,7 @@ export function FeedCard({ item }: { item: FeedItem }) {
       return (
         <div className="gb-in rounded-xl border border-amber/50 bg-amber/10 p-4 shadow-[0_0_0_1px_rgba(244,179,80,0.15)]">
           <div className="flex items-center gap-2.5">
-            <span className="gb-pulse text-lg">🔧</span>
+            <RefreshCcw size={17} className="shrink-0 animate-spin text-amber" />
             <div>
               <div className="text-sm font-semibold text-amber">
                 Agent detected an error and is fixing it
@@ -254,7 +221,7 @@ export function FeedCard({ item }: { item: FeedItem }) {
 
     case "code":
       return (
-        <CardShell icon="💻" label={`Code · ${item.stepDescription}`}>
+        <CardShell icon={<Code size={15} className="text-muted" />} label={`Code · ${item.stepDescription}`}>
           <div className="overflow-hidden rounded-lg border border-border">
             <SyntaxHighlighter
               language="python"
@@ -283,7 +250,9 @@ export function FeedCard({ item }: { item: FeedItem }) {
             : { text: "Success", cls: "bg-green/15 text-green border-green/30" };
       return (
         <CardShell
-          icon={item.isError ? "⛔" : "▶️"}
+          icon={
+            <SquareTerminal size={15} className={item.isError ? "text-red" : "text-muted"} />
+          }
           label="Execution"
           labelClass={item.isError ? "text-red" : "text-muted"}
         >
@@ -314,7 +283,7 @@ export function FeedCard({ item }: { item: FeedItem }) {
       const clickable = !!scrollToCite;
       return (
         <CardShell
-          icon="📑"
+          icon={<Quote size={15} className="text-muted" />}
           label={`Citation${cite.section ? ` · ${cite.section}` : ""}`}
           className={cn(
             clickable &&
@@ -355,7 +324,13 @@ export function FeedCard({ item }: { item: FeedItem }) {
         : `Grounding check: ${item.issues.length} issue${item.issues.length === 1 ? "" : "s"}`;
       return (
         <CardShell
-          icon={passed ? "🛡️" : "⚠️"}
+          icon={
+            passed ? (
+              <ShieldCheck size={15} className="text-green" />
+            ) : (
+              <TriangleAlert size={15} className="text-amber" />
+            )
+          }
           label={label}
           labelClass={passed ? "text-green" : "text-amber"}
           className={passed ? "border-green/25" : "border-amber/40"}
@@ -382,7 +357,7 @@ export function FeedCard({ item }: { item: FeedItem }) {
     case "insight":
       return (
         <CardShell
-          icon="✅"
+          icon={<ChartColumn size={15} className="text-green" />}
           label="Report ready"
           labelClass="text-green"
           className="border-green/30"

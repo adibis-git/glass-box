@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
+import { Search, FileText, Info, Brush, Check, Layers, Upload } from "lucide-react";
 
 type Role = "OWNER" | "ADMIN" | "MEMBER" | "VIEWER";
 
@@ -150,7 +151,13 @@ export function DatasetDetail({
         <div className="mt-4 flex flex-wrap gap-2">
           {(dataset.availableSheets ?? []).map((s) => (
             <Button key={s} variant="secondary" size="sm" disabled={!!busy} onClick={() => pickSheet(s)}>
-              {busy === s ? "Processing…" : `📄 ${s}`}
+              {busy === s ? (
+                "Processing…"
+              ) : (
+                <span className="inline-flex items-center gap-1.5">
+                  <FileText size={14} /> {s}
+                </span>
+              )}
             </Button>
           ))}
         </div>
@@ -175,7 +182,13 @@ export function DatasetDetail({
       <div className="flex items-center gap-3">
         {canAnalyze && (
           <Button variant="primary" onClick={analyze} disabled={!!busy}>
-            {busy === "analyze" ? "Starting…" : "🔎 Analyze this dataset"}
+            {busy === "analyze" ? (
+              "Starting…"
+            ) : (
+              <span className="inline-flex items-center gap-1.5">
+                <Search size={15} /> Analyze this dataset
+              </span>
+            )}
           </Button>
         )}
         {canDelete && (
@@ -192,9 +205,12 @@ export function DatasetDetail({
       </div>
 
       {dataset.sampled && (
-        <div className="rounded-xl border border-amber/30 bg-amber/10 px-4 py-2.5 text-xs text-amber">
-          ◍ Large file — a representative sample drawn from 12 regions across the whole file is
-          analyzed. Aggregates are estimates; patterns and trends are reliable.
+        <div className="flex items-start gap-2 rounded-xl border border-amber/30 bg-amber/10 px-4 py-2.5 text-xs text-amber">
+          <Info size={14} className="mt-0.5 shrink-0" />
+          <span>
+            Large file — a representative sample drawn from 12 regions across the whole file is
+            analyzed. Aggregates are estimates; patterns and trends are reliable.
+          </span>
         </div>
       )}
 
@@ -203,14 +219,14 @@ export function DatasetDetail({
       {(dataset.normalizations?.length ?? 0) > 0 && (
         <div className="rounded-2xl border border-border bg-panel p-4">
           <div className="mb-2 flex items-center gap-2">
-            <span>🧹</span>
+            <Brush size={15} className="text-muted" />
             <span className="text-sm font-semibold text-foreground">Data preparation</span>
             <span className="text-[11px] text-muted">— exactly what we changed, nothing hidden</span>
           </div>
           <ul className="space-y-1">
             {dataset.normalizations!.map((n, i) => (
               <li key={i} className="flex items-start gap-2 text-xs text-foreground/80">
-                <span className="mt-0.5 text-green">✓</span>
+                <Check size={13} className="mt-0.5 shrink-0 text-green" />
                 {n.detail}
               </li>
             ))}
@@ -272,7 +288,7 @@ function DocumentProfileCard({ doc }: { doc: DocInfo }) {
   return (
     <div className="rounded-2xl border border-border bg-panel p-4">
       <div className="mb-2 flex items-center gap-2">
-        <span>📄</span>
+        <FileText size={15} className="text-muted" />
         <span className="text-sm font-semibold text-foreground">Document profile</span>
         <span className="rounded border border-blue/30 bg-blue/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-blue">
           {doc.docType}
@@ -335,7 +351,7 @@ function VersionsPanel({
     <div className="rounded-2xl border border-border bg-panel p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span>🗂️</span>
+          <Layers size={15} className="text-muted" />
           <span className="text-sm font-semibold text-foreground">Versions</span>
           <span className="text-[11px] text-muted">— every revision is kept and comparable</span>
         </div>
@@ -352,7 +368,13 @@ function VersionsPanel({
               }}
             />
             <Button variant="secondary" size="sm" disabled={uploading} onClick={() => fileRef.current?.click()}>
-              {uploading ? "Uploading…" : "⬆ Upload new version"}
+              {uploading ? (
+                "Uploading…"
+              ) : (
+                <span className="inline-flex items-center gap-1.5">
+                  <Upload size={14} /> Upload new version
+                </span>
+              )}
             </Button>
           </>
         )}

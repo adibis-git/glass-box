@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DocSection } from "@/lib/agent/context";
 import { cn } from "@/lib/utils";
+import { ChevronRight, FileText, Loader2 } from "lucide-react";
 
 export interface CiteTarget {
   anchor: string;
@@ -180,8 +181,9 @@ export function SourceDocumentPanel({
         onClick={() => onToggle(!open)}
         className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-xs font-medium text-muted hover:text-foreground"
       >
-        <span className={cn("transition-transform", open && "rotate-90")}>▸</span>
-        <span>📄 Source document</span>
+        <ChevronRight size={14} className={cn("shrink-0 transition-transform", open && "rotate-90")} />
+        <FileText size={14} className="shrink-0" />
+        <span>Source document</span>
         <span className="truncate text-foreground/70">— {name}</span>
         {typeof version === "number" && <span className="text-muted">v{version}</span>}
         <span className="ml-auto text-[10px] uppercase tracking-wide text-muted/80">
@@ -191,7 +193,12 @@ export function SourceDocumentPanel({
 
       {open && (
         <div className="border-t border-border">
-          {loading && <div className="px-4 py-6 text-xs text-muted">Loading document…</div>}
+          {loading && (
+            <div className="flex items-center gap-2 px-4 py-6 text-xs text-muted">
+              <Loader2 size={14} className="animate-spin" />
+              Loading document…
+            </div>
+          )}
           {error && !loading && (
             <div className="px-4 py-4 text-xs text-amber">{error}</div>
           )}

@@ -6,20 +6,35 @@ import { SessionProvider, useSession, signOut } from "next-auth/react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import type { OrgSummary } from "@/lib/activeOrg";
+import {
+  Database,
+  MessagesSquare,
+  ChartColumn,
+  Users,
+  ScrollText,
+  Settings,
+  Snowflake,
+  Sheet,
+  Plus,
+  ChevronDown,
+  LogOut,
+  ScanSearch,
+  type LucideIcon,
+} from "lucide-react";
 
-const NAV = [
-  { href: "/app/datasets", label: "Datasets", icon: "🗂️" },
-  { href: "/app/conversations", label: "Conversations", icon: "💬" },
-  { href: "/app/usage", label: "Usage", icon: "📊" },
-  { href: "/app/members", label: "Members", icon: "👥" },
-  { href: "/app/audit", label: "Audit log", icon: "🧾" },
-  { href: "/app/settings", label: "Settings", icon: "⚙️" },
+const NAV: { href: string; label: string; icon: LucideIcon }[] = [
+  { href: "/app/datasets", label: "Datasets", icon: Database },
+  { href: "/app/conversations", label: "Conversations", icon: MessagesSquare },
+  { href: "/app/usage", label: "Usage", icon: ChartColumn },
+  { href: "/app/members", label: "Members", icon: Users },
+  { href: "/app/audit", label: "Audit log", icon: ScrollText },
+  { href: "/app/settings", label: "Settings", icon: Settings },
 ];
 
-const CONNECTORS = [
-  { name: "PostgreSQL", icon: "🐘" },
-  { name: "Snowflake", icon: "❄️" },
-  { name: "Google Sheets", icon: "📄" },
+const CONNECTORS: { name: string; icon: LucideIcon }[] = [
+  { name: "PostgreSQL", icon: Database },
+  { name: "Snowflake", icon: Snowflake },
+  { name: "Google Sheets", icon: Sheet },
 ];
 
 function OrgSwitcher({ orgs, active }: { orgs: OrgSummary[]; active: OrgSummary }) {
@@ -82,7 +97,7 @@ function OrgSwitcher({ orgs, active }: { orgs: OrgSummary[]; active: OrgSummary 
             {active.role}
           </span>
         </span>
-        <span className="text-muted">▾</span>
+        <ChevronDown size={15} className="shrink-0 text-muted" />
       </button>
       {open && (
         <div className="absolute left-0 right-0 z-20 mt-1 overflow-hidden rounded-lg border border-border bg-panel shadow-xl">
@@ -140,9 +155,9 @@ function OrgSwitcher({ orgs, active }: { orgs: OrgSummary[]; active: OrgSummary 
             ) : (
               <button
                 onClick={() => setCreating(true)}
-                className="block w-full px-3 py-2 text-left text-sm text-foreground/70 hover:bg-panel-2 hover:text-foreground"
+                className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-sm text-foreground/70 hover:bg-panel-2 hover:text-foreground"
               >
-                <span className="mr-1.5 text-muted">＋</span> New workspace
+                <Plus size={14} className="text-muted" /> New workspace
               </button>
             )}
           </div>
@@ -172,8 +187,8 @@ function Shell({
       {/* Sidebar */}
       <aside className="flex w-60 shrink-0 flex-col border-r border-border bg-panel">
         <Link href="/app" className="flex items-center gap-2 px-4 py-4">
-          <span className="grid h-7 w-7 place-items-center rounded-md border border-accent/40 bg-accent/15 text-sm">
-            🔎
+          <span className="grid h-7 w-7 place-items-center rounded-md border border-accent/40 bg-accent/15 text-accent">
+            <ScanSearch size={16} />
           </span>
           <span className="font-semibold tracking-tight text-foreground">Glass Box</span>
         </Link>
@@ -185,6 +200,7 @@ function Shell({
         <nav className="flex-1 space-y-0.5 px-3">
           {NAV.map((item) => {
             const activeNav = pathname.startsWith(item.href);
+            const Icon = item.icon;
             return (
               <Link
                 key={item.href}
@@ -196,7 +212,7 @@ function Shell({
                     : "text-foreground/75 hover:bg-panel-2 hover:text-foreground",
                 )}
               >
-                <span className="text-base leading-none">{item.icon}</span>
+                <Icon size={16} className="shrink-0" />
                 {item.label}
               </Link>
             );
@@ -208,20 +224,23 @@ function Shell({
               Data sources
             </div>
             <div className="mt-2 space-y-1">
-              {CONNECTORS.map((c) => (
+              {CONNECTORS.map((c) => {
+                const Icon = c.icon;
+                return (
                 <div
                   key={c.name}
                   className="flex items-center justify-between rounded-lg border border-dashed border-border px-3 py-1.5 opacity-55"
                   title="Coming soon"
                 >
                   <span className="flex items-center gap-2 text-xs text-foreground/70">
-                    <span>{c.icon}</span> {c.name}
+                    <Icon size={13} className="shrink-0" /> {c.name}
                   </span>
                   <span className="rounded bg-panel-2 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-muted">
                     Soon
                   </span>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </nav>
@@ -234,10 +253,10 @@ function Shell({
             </div>
             <button
               onClick={() => signOut({ callbackUrl: "/" })}
-              className="rounded-md px-2 py-1 text-xs text-muted hover:bg-panel-2 hover:text-foreground"
+              className="rounded-md p-1.5 text-muted hover:bg-panel-2 hover:text-foreground"
               title="Sign out"
             >
-              ⎋
+              <LogOut size={15} />
             </button>
           </div>
         </div>

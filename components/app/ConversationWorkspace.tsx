@@ -12,7 +12,20 @@ import { ChartRenderer } from "@/components/ChartRenderer";
 import { Button } from "@/components/ui/Button";
 import { CitationProvider, type ScrollToCitation } from "@/components/app/SourceDocContext";
 import { SourceDocumentPanel, type CiteTarget } from "@/components/app/SourceDocumentPanel";
+import { Markdown } from "@/components/Markdown";
 import type { AnalysisEffort } from "@/lib/generated/prisma/enums";
+import {
+  Sparkles,
+  CircleUserRound,
+  Wrench,
+  ChevronRight,
+  Loader2,
+  Ban,
+  ScanSearch,
+  ArrowUpCircle,
+  Check,
+  Share2,
+} from "lucide-react";
 
 type Role = "OWNER" | "ADMIN" | "MEMBER" | "VIEWER";
 
@@ -44,16 +57,22 @@ interface ConversationProp {
 function SuggestionChips({ items, onPick }: { items: string[]; onPick: (q: string) => void }) {
   if (!items.length) return null;
   return (
-    <div className="flex flex-wrap gap-2 pl-9">
-      {items.map((s) => (
-        <button
-          key={s}
-          onClick={() => onPick(s)}
-          className="rounded-lg border border-border bg-panel px-3 py-1.5 text-xs text-foreground/80 hover:border-accent/50 hover:text-foreground"
-        >
-          {s}
-        </button>
-      ))}
+    <div className="space-y-1.5 pl-9">
+      <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted">
+        <Sparkles size={12} className="text-muted" />
+        Suggested
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {items.map((s) => (
+          <button
+            key={s}
+            onClick={() => onPick(s)}
+            className="rounded-full border border-border bg-panel/60 px-3 py-1.5 text-xs text-foreground/80 transition hover:border-accent/50 hover:text-foreground"
+          >
+            {s}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -92,17 +111,28 @@ function ShareButton({ orgId, messageId }: { orgId: string; messageId: string })
 
   if (link)
     return (
-      <a href={link} target="_blank" className="text-xs text-green hover:underline">
-        ✓ Link copied — open shared report ↗
+      <a href={link} target="_blank" className="inline-flex items-center gap-1.5 text-xs text-green hover:underline">
+        <Check size={13} className="text-green" />
+        Link copied — open shared report
       </a>
     );
   return (
     <button
       onClick={share}
       disabled={state === "busy"}
-      className="text-xs text-muted hover:text-accent"
+      className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent"
     >
-      {state === "busy" ? "Creating link…" : "🔗 Share this report"}
+      {state === "busy" ? (
+        <>
+          <Loader2 size={13} className="animate-spin" />
+          Creating link…
+        </>
+      ) : (
+        <>
+          <Share2 size={13} />
+          Share this report
+        </>
+      )}
     </button>
   );
 }
@@ -147,8 +177,8 @@ function RunBlock({
     <div className="space-y-4">
       {/* Question */}
       <div className="flex items-start gap-2.5">
-        <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/15 text-sm">
-          ❓
+        <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full border border-border bg-panel-2 text-muted">
+          <CircleUserRound size={16} />
         </span>
         <div className="rounded-xl rounded-tl-sm border border-border bg-panel px-4 py-2.5 text-sm text-foreground/90">
           {question}
@@ -158,7 +188,7 @@ function RunBlock({
       {/* Live progress line */}
       {live && state.status === "running" && (
         <div className="flex items-center gap-2 pl-9 text-xs text-muted">
-          <span className="gb-pulse">◍</span>
+          <Loader2 size={14} className="animate-spin text-accent" />
           {state.step ? `Analyzing — step ${state.step.current} of ${state.step.max}` : "Starting…"}
           {corrections > 0 && (
             <span className="text-amber">· self-corrected {corrections}×</span>
@@ -171,7 +201,7 @@ function RunBlock({
         {state.notice && (
           <div className="rounded-xl border border-amber/40 bg-amber/10 px-4 py-3">
             <div className="flex items-start gap-2.5">
-              <span>🚫</span>
+              <Ban size={16} className="mt-0.5 shrink-0 text-amber" />
               <p className="text-sm leading-relaxed text-amber">{state.notice.text}</p>
             </div>
           </div>
@@ -190,14 +220,14 @@ function RunBlock({
         {/* Primary conversational answer (non-report turns) */}
         {answerItem && (
           <div className="flex items-start gap-2.5">
-            <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/15 text-sm">
-              💬
+            <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full border border-accent/40 bg-accent/15 text-accent">
+              <Sparkles size={15} />
             </span>
             <div className="min-w-0 flex-1 rounded-xl rounded-tl-sm border border-accent/30 bg-accent/5 px-4 py-3">
-              <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                {answerItem.text}
-                {answerItem.streaming && <span className="gb-pulse">▍</span>}
-              </p>
+              <Markdown text={answerItem.text} className="text-foreground/95" />
+              {answerItem.streaming && (
+                <Loader2 size={14} className="mt-1 animate-spin text-accent" />
+              )}
             </div>
           </div>
         )}
@@ -223,15 +253,17 @@ function RunBlock({
             answer (plan · code · output · fixes); the answer/report itself is
             surfaced above, so this stays collapsed by default. */}
         {traceFeed.length > 0 && (
-          <details className="group rounded-xl border border-border bg-panel/60" open={live}>
-            <summary className="cursor-pointer select-none px-4 py-2.5 text-xs font-medium text-muted hover:text-foreground">
-              🔎 {answerItem || state.report ? "Show the work" : "Agent trace"}
-              {steps > 0 && <span className="ml-1">— {steps} step{steps === 1 ? "" : "s"}</span>}
+          <details className="group rounded-xl border border-border/70 bg-panel/40 open:bg-panel/60" open={live}>
+            <summary className="flex cursor-pointer select-none list-none items-center gap-1.5 px-3 py-2 text-xs font-medium text-muted transition-colors hover:text-foreground">
+              <ChevronRight size={13} className="shrink-0 transition-transform group-open:rotate-90" />
+              <Wrench size={13} className="shrink-0" />
+              <span>{answerItem || state.report ? "Show the work" : "Agent trace"}</span>
+              {steps > 0 && <span className="text-muted/80">· {steps} step{steps === 1 ? "" : "s"}</span>}
               {corrections > 0 && (
-                <span className="ml-1 text-amber">incl. {corrections} self-correction{corrections === 1 ? "" : "s"}</span>
+                <span className="text-amber">· {corrections} self-correction{corrections === 1 ? "" : "s"}</span>
               )}
-              <span className="ml-2 text-[10px] uppercase tracking-wide">
-                (plan · code · output · fixes — nothing hidden)
+              <span className="ml-1 text-[10px] uppercase tracking-wide text-muted/70">
+                plan · code · output · fixes
               </span>
             </summary>
             <div className="space-y-3 border-t border-border p-3">
@@ -433,7 +465,10 @@ export function ConversationWorkspace({
             </div>
           </div>
           {running && (
-            <span className="gb-pulse shrink-0 text-xs text-accent">● analyzing</span>
+            <span className="flex shrink-0 items-center gap-1.5 text-xs text-accent">
+              <Loader2 size={13} className="animate-spin" />
+              analyzing
+            </span>
           )}
         </div>
         {(personaLabel || domain) && (
@@ -477,7 +512,7 @@ export function ConversationWorkspace({
                   key={u.sourceId}
                   className="flex flex-wrap items-center gap-2 rounded-xl border border-blue/40 bg-blue/10 px-4 py-2.5 text-sm text-blue"
                 >
-                  <span className="text-base">⬆️</span>
+                  <ArrowUpCircle size={16} className="shrink-0 text-blue" />
                   <span className="text-foreground/90">
                     A newer version (v{u.latestVersion}) of{" "}
                     <span className="font-medium">{u.name}</span> is available — you&apos;re on v
@@ -512,7 +547,11 @@ export function ConversationWorkspace({
 
           {!hasAnyRun && (
             <div className="rounded-2xl border border-dashed border-border bg-panel/50 p-10 text-center">
-              <div className="mb-3 text-4xl">🔎</div>
+              <div className="mb-3 grid place-items-center">
+                <span className="grid h-12 w-12 place-items-center rounded-full border border-accent/30 bg-accent/10 text-accent">
+                  <ScanSearch size={22} />
+                </span>
+              </div>
               <h2 className="text-sm font-semibold text-foreground">Ask anything about this data</h2>
               <p className="mx-auto mt-1 max-w-md text-sm text-muted">
                 The agent will plan, write Python, run it against your data, chart the results,
@@ -544,7 +583,11 @@ export function ConversationWorkspace({
               orgId={orgId}
               messageId={run.messageId}
               canShare={canAsk}
-              suggestions={canAsk ? run.suggestions : null}
+              suggestions={
+                canAsk && i === persistedRuns.length - 1 && liveQuestion === null
+                  ? run.suggestions
+                  : null
+              }
               onAsk={canAsk ? ask : undefined}
             />
           ))}
