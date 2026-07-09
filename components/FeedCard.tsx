@@ -210,6 +210,18 @@ export function FeedCard({ item }: { item: FeedItem }) {
       );
     }
 
+    case "cite":
+      return (
+        <CardShell icon="📑" label={`Citation${item.section ? ` · ${item.section}` : ""}`}>
+          <blockquote className="border-l-2 border-accent/60 pl-3 text-sm italic leading-relaxed text-foreground/90">
+            “{item.quote}”
+          </blockquote>
+          <div className="mt-2 font-mono text-[10px] uppercase tracking-wide text-muted">
+            anchor {item.anchor}
+          </div>
+        </CardShell>
+      );
+
     case "insight":
       return (
         <CardShell

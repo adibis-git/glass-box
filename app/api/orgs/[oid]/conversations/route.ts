@@ -1,12 +1,18 @@
 import { prisma } from "@/lib/db";
 import { authorize, authzErrorResponse } from "@/lib/authz";
 import { audit } from "@/lib/audit";
-import { generateStarterQuestions } from "@/lib/agent/suggestions";
+import {
+  generateStarterQuestions,
+  generateDocumentStarters,
+  type DocDescriptor,
+} from "@/lib/agent/suggestions";
 import {
   buildContextPack,
+  isDocProfile,
   type ColumnProfile,
   type DatasetContext,
   type DatasetDomain,
+  type DocProfile,
 } from "@/lib/agent/context";
 
 export const runtime = "nodejs";
@@ -64,7 +70,7 @@ export async function POST(req: Request, { params }: Params) {
     const sources = await prisma.source.findMany({
       where: { id: { in: links.map((l) => l.datasetId) }, orgId: oid },
       select: {
-        id: true, name: true,
+        id: true, name: true, kind: true,
         versions: {
           where: { deletedAt: null, status: "READY" },
           orderBy: { version: "desc" },
@@ -121,25 +127,43 @@ export async function POST(req: Request, { params }: Params) {
           select: { domain: true, vertical: true },
         }),
       ]);
-      const dctx: DatasetContext[] = links.map((l) => {
-        const { source: s, version: v } = latestBySource.get(l.datasetId)!;
-        const raw = v.profile as { columns?: ColumnProfile[]; domain?: DatasetDomain } | null;
-        return {
-          alias: l.alias,
-          name: s.name,
-          rowCount: v.rowCount,
-          sampled: v.sampled,
-          columns: raw && Array.isArray(raw.columns) ? raw.columns : [],
-          domain: raw?.domain,
-          sampleRows: (v.sampleRows as Record<string, unknown>[]) ?? [],
-        };
-      });
+      const attached = links.map((l) => latestBySource.get(l.datasetId)!);
+      const allDocuments =
+        attached.length > 0 && attached.every((a) => a.source.kind === "DOCUMENT");
+
       const pack = buildContextPack({
         persona: membership?.persona ?? null,
         org: { domain: org?.domain, vertical: org?.vertical },
-        datasets: dctx,
+        datasets: allDocuments
+          ? []
+          : links.map((l): DatasetContext => {
+              const { source: s, version: v } = latestBySource.get(l.datasetId)!;
+              const raw = v.profile as { columns?: ColumnProfile[]; domain?: DatasetDomain } | null;
+              return {
+                alias: l.alias,
+                name: s.name,
+                rowCount: v.rowCount,
+                sampled: v.sampled,
+                columns: raw && Array.isArray(raw.columns) ? raw.columns : [],
+                domain: raw?.domain,
+                sampleRows: (v.sampleRows as Record<string, unknown>[]) ?? [],
+              };
+            }),
       });
-      const starterQuestions = await generateStarterQuestions(pack);
+      const starterQuestions = allDocuments
+        ? await generateDocumentStarters(
+            pack,
+            attached.map(({ source: s, version: v }): DocDescriptor => {
+              const p = isDocProfile(v.profile) ? (v.profile as DocProfile) : null;
+              return {
+                name: s.name,
+                docType: p?.docType,
+                description: p?.description,
+                sections: p?.sections.map((sec) => sec.heading),
+              };
+            }),
+          )
+        : await generateStarterQuestions(pack);
       if (starterQuestions.length) {
         await prisma.conversation.update({
           where: { id: conversation.id },

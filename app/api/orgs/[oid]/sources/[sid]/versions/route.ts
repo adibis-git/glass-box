@@ -21,7 +21,11 @@ export async function POST(req: Request, { params }: Params) {
 
     const source = await prisma.source.findFirst({
       where: { id: sid, orgId: oid },
-      include: { versions: { orderBy: { version: "desc" }, take: 1, select: { version: true } } },
+      select: {
+        kind: true,
+        name: true,
+        versions: { orderBy: { version: "desc" }, take: 1, select: { version: true } },
+      },
     });
     if (!source) return Response.json({ error: "Source not found." }, { status: 404 });
 
@@ -37,9 +41,9 @@ export async function POST(req: Request, { params }: Params) {
     const buf = Buffer.from(await file.arrayBuffer());
     const nextVersion = (source.versions[0]?.version ?? 0) + 1;
 
-    let versionData;
+    let built;
     try {
-      versionData = await buildVersionData(
+      built = await buildVersionData(
         oid,
         {
           buf,
@@ -56,8 +60,20 @@ export async function POST(req: Request, { params }: Params) {
       throw e;
     }
 
+    // A version must match its source's modality (don't mix tabular + document).
+    if (built.kind !== source.kind) {
+      return Response.json(
+        {
+          error: `This source holds ${source.kind.toLowerCase()} files — upload a matching ${
+            source.kind === "DOCUMENT" ? "PDF/DOCX/TXT" : "CSV/Excel"
+          } file.`,
+        },
+        { status: 400 },
+      );
+    }
+
     const version = await prisma.sourceVersion.create({
-      data: { sourceId: sid, version: nextVersion, ...versionData },
+      data: { sourceId: sid, version: nextVersion, ...built.data },
     });
 
     await audit({

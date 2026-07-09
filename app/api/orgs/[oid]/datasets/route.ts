@@ -71,11 +71,11 @@ export async function POST(req: Request, { params }: Params) {
     }
 
     const buf = Buffer.from(await file.arrayBuffer());
-    const name = file.name.replace(/\.(csv|tsv|txt|xlsx|xls)$/i, "");
+    const name = file.name.replace(/\.(csv|tsv|txt|xlsx|xls|pdf|docx|doc|md)$/i, "");
 
-    let versionData;
+    let built;
     try {
-      versionData = await buildVersionData(
+      built = await buildVersionData(
         oid,
         {
           buf,
@@ -95,9 +95,9 @@ export async function POST(req: Request, { params }: Params) {
     const source = await prisma.source.create({
       data: {
         orgId: oid,
-        kind: "TABULAR",
+        kind: built.kind,
         name,
-        versions: { create: { version: 1, ...versionData } },
+        versions: { create: { version: 1, ...built.data } },
       },
       include: { versions: true },
     });

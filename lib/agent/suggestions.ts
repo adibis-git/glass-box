@@ -138,3 +138,65 @@ Write exactly 3 natural follow-up questions that dig deeper or open a useful adj
 Respond with ONLY a JSON array of exactly 3 strings. No other text.`;
   return parseQuestionArray(await callModel(prompt), 3);
 }
+
+// ── Document pillar (v3 §5/§14) ───────────────────────────────────────────────
+
+export interface DocDescriptor {
+  name: string;
+  docType?: string;
+  description?: string;
+  sections?: string[];
+}
+
+function describeDocs(pack: ContextPack, docs: DocDescriptor[]): string {
+  const lines: string[] = [];
+  if (pack.persona) lines.push(`Audience: ${pack.persona.label}. ${pack.persona.framing}`);
+  if (pack.org.domain) lines.push(`Business context: ${pack.org.domain}.`);
+  if (pack.org.vertical) lines.push(`Industry: ${pack.org.vertical}.`);
+  lines.push("", "Loaded document(s):");
+  for (const d of docs) {
+    lines.push(`- "${d.name}"${d.docType ? ` (${d.docType})` : ""}`);
+    if (d.description) lines.push(`  ${d.description}`);
+    if (d.sections?.length) lines.push(`  sections: ${d.sections.slice(0, 20).join("; ")}`);
+  }
+  return lines.join("\n");
+}
+
+/** 4-6 persona×document starter questions for a new document conversation. */
+export async function generateDocumentStarters(
+  pack: ContextPack,
+  docs: DocDescriptor[],
+): Promise<string[]> {
+  if (!docs.length) return [];
+  const prompt = `You seed a document-analysis workspace with starter questions the user can click to begin.
+
+${describeDocs(pack, docs)}
+
+Write 4-6 sharp, specific starter questions this audience would actually want answered from THESE document(s). Favor high-value angles for the doc type — e.g. for an RFP/requirements doc: "Extract every mandatory requirement", "Where does this put risk on the vendor?"; for a contract/policy: key obligations, liabilities, unusual terms, deadlines. Each must be answerable from the document text.
+
+Respond with ONLY a JSON array of strings. No other text.`;
+  return parseQuestionArray(await callModel(prompt), 6);
+}
+
+/** 3 next-step questions after a document run. */
+export async function generateDocumentFollowUps(
+  question: string,
+  answerOrReportJson: string,
+  pack: ContextPack,
+  docs: DocDescriptor[],
+): Promise<string[]> {
+  if (!docs.length) return [];
+  const prompt = `You suggest next-step questions in a document-analysis workspace.
+
+${describeDocs(pack, docs)}
+
+The user just asked: "${question}"
+
+The analysis produced:
+${answerOrReportJson.slice(0, 3000)}
+
+Write exactly 3 natural follow-up questions that dig deeper or open a useful adjacent angle, each answerable from the document(s). Don't repeat the original question.
+
+Respond with ONLY a JSON array of exactly 3 strings. No other text.`;
+  return parseQuestionArray(await callModel(prompt), 3);
+}

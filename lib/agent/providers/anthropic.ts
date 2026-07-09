@@ -10,6 +10,8 @@ import type { AgentRequest, SseWrite } from "./shared";
 const MODEL = "claude-sonnet-5";
 
 type Effort = "low" | "medium" | "high";
+/** Loose tool shape so the doc engine can pass its own tool set (v3 §14.3). */
+type ToolDef = { name: string; description: string; input_schema: object };
 
 export async function runAnthropicTurn(
   write: SseWrite,
@@ -17,6 +19,7 @@ export async function runAnthropicTurn(
   apiKey: string,
   system: string,
   effort: Effort,
+  toolset: ToolDef[] = AGENT_TOOLS,
 ): Promise<void> {
   const client = new Anthropic({ apiKey });
 
@@ -27,7 +30,7 @@ export async function runAnthropicTurn(
     // (user-selectable, defaults to LOW) scales how much it reasons.
     output_config: { effort },
     system,
-    tools: AGENT_TOOLS as Anthropic.Tool[],
+    tools: toolset as Anthropic.Tool[],
     tool_choice: { type: "auto" },
     messages: body.messages as Anthropic.MessageParam[],
   });

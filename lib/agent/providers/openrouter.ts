@@ -16,6 +16,8 @@ const MODEL = "anthropic/claude-sonnet-5";
 const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 
 type Effort = "low" | "medium" | "high";
+/** Loose tool shape so the doc engine can pass its own tool set (v3 §14.3). */
+type ToolDef = { name: string; description: string; input_schema: object };
 
 // --- Anthropic history -> OpenAI messages ---
 interface OAIMessage {
@@ -118,10 +120,12 @@ function safeJsonParse(s: string): Record<string, unknown> {
   }
 }
 
-const OAI_TOOLS = AGENT_TOOLS.map((t) => ({
-  type: "function" as const,
-  function: { name: t.name, description: t.description, parameters: t.input_schema },
-}));
+function toOAITools(toolset: ToolDef[]) {
+  return toolset.map((t) => ({
+    type: "function" as const,
+    function: { name: t.name, description: t.description, parameters: t.input_schema },
+  }));
+}
 
 export async function runOpenRouterTurn(
   write: SseWrite,
@@ -129,11 +133,12 @@ export async function runOpenRouterTurn(
   apiKey: string,
   system: string,
   effort: Effort,
+  toolset: ToolDef[] = AGENT_TOOLS,
 ): Promise<void> {
   const reqBody = {
     model: MODEL,
     messages: toOpenAIMessages(body.messages, system),
-    tools: OAI_TOOLS,
+    tools: toOAITools(toolset),
     tool_choice: "auto",
     // The user-selectable effort dial (defaults to LOW) scales reasoning.
     reasoning: { effort },

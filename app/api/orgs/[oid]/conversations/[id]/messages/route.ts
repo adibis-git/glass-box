@@ -6,8 +6,10 @@ import { prisma } from "@/lib/db";
 import { authorize, authzErrorResponse } from "@/lib/authz";
 import { audit } from "@/lib/audit";
 import { runAgentTurn, type RunnerDataset } from "@/server/agent/runner";
+import { runDocumentTurn, type DocumentRef } from "@/server/agent/documentEngine";
+import { getStorage } from "@/server/storage";
 import type { ChatMessage, ContentBlock } from "@/lib/types";
-import type { ColumnProfile, DatasetDomain } from "@/lib/agent/context";
+import { isDocProfile, type ColumnProfile, type DatasetDomain, type DocProfile } from "@/lib/agent/context";
 import type { Prisma, AnalysisEffort } from "@/lib/generated/prisma/client";
 
 const EFFORTS = new Set<AnalysisEffort>(["LOW", "MEDIUM", "HIGH"]);
@@ -61,7 +63,7 @@ export async function POST(req: Request, { params }: Params) {
     where: { id, orgId: oid },
     include: {
       org: { select: { domain: true, vertical: true } },
-      sources: { include: { source: { select: { name: true } }, version: true } },
+      sources: { include: { source: { select: { name: true, kind: true } }, version: true } },
       messages: { orderBy: { createdAt: "asc" } },
     },
   });
@@ -84,26 +86,61 @@ export async function POST(req: Request, { params }: Params) {
     return Response.json({ error: "A run is already in progress for this conversation." }, { status: 409 });
   }
 
-  const datasets: RunnerDataset[] = conversation.sources.map((l) => {
-    const v = l.version; // the pinned SourceVersion (v3 §2)
-    const raw = v.profile as { columns?: ColumnProfile[]; domain?: DatasetDomain } | null;
-    const profile =
-      raw && Array.isArray(raw.columns)
-        ? { columns: raw.columns, domain: raw.domain }
-        : undefined;
-    return {
-      versionId: v.id,
-      alias: l.alias,
-      storageKey: v.storageKey,
-      name: l.source.name,
-      rowCount: v.rowCount,
-      sampled: v.sampled,
-      columnSchema: (v.columnSchema as { name: string; dtype: string }[]) ?? [],
-      sampleRows: (v.sampleRows as Record<string, unknown>[]) ?? [],
-      profile,
-    };
-  });
-  if (datasets.some((d) => !d.storageKey)) {
+  // Route by modality: a conversation whose pinned sources are all DOCUMENT runs
+  // the document engine; otherwise the tabular runner (unchanged). Mixed
+  // conversations fall through to the tabular path (documents ignored).
+  const docLinks = conversation.sources.filter((l) => l.source.kind === "DOCUMENT");
+  const isDocument = docLinks.length > 0 && docLinks.length === conversation.sources.length;
+
+  const datasets: RunnerDataset[] = isDocument
+    ? []
+    : conversation.sources
+        .filter((l) => l.source.kind !== "DOCUMENT")
+        .map((l) => {
+          const v = l.version; // the pinned SourceVersion (v3 §2)
+          const raw = v.profile as { columns?: ColumnProfile[]; domain?: DatasetDomain } | null;
+          const profile =
+            raw && Array.isArray(raw.columns) ? { columns: raw.columns, domain: raw.domain } : undefined;
+          return {
+            versionId: v.id,
+            alias: l.alias,
+            storageKey: v.storageKey,
+            name: l.source.name,
+            rowCount: v.rowCount,
+            sampled: v.sampled,
+            columnSchema: (v.columnSchema as { name: string; dtype: string }[]) ?? [],
+            sampleRows: (v.sampleRows as Record<string, unknown>[]) ?? [],
+            profile,
+          };
+        });
+
+  // For document conversations, load the extracted text for each pinned version.
+  let documents: DocumentRef[] = [];
+  if (isDocument) {
+    if (docLinks.some((l) => l.version.status !== "READY")) {
+      return Response.json({ error: "A document in this conversation isn't ready." }, { status: 409 });
+    }
+    const storage = getStorage();
+    try {
+      documents = await Promise.all(
+        docLinks.map(async (l) => {
+          const v = l.version;
+          const key = v.extractedTextKey ?? v.storageKey;
+          const text = await storage.getText(key);
+          return {
+            versionId: v.id,
+            sourceId: l.sourceId,
+            alias: l.alias,
+            name: l.source.name,
+            text,
+            profile: isDocProfile(v.profile) ? (v.profile as DocProfile) : undefined,
+          };
+        }),
+      );
+    } catch {
+      return Response.json({ error: "Could not load a document's extracted text." }, { status: 409 });
+    }
+  } else if (datasets.some((d) => !d.storageKey)) {
     return Response.json({ error: "A dataset in this conversation isn't ready." }, { status: 409 });
   }
 
@@ -128,7 +165,11 @@ export async function POST(req: Request, { params }: Params) {
   await audit({
     orgId: oid, actorId: ctx.userId, action: "agent.run_start",
     targetType: "conversation", targetId: id,
-    metadata: { messageId: assistantMsg.id, question: question.slice(0, 200), datasets: datasets.map((d) => d.alias) },
+    metadata: {
+      messageId: assistantMsg.id,
+      question: question.slice(0, 200),
+      datasets: (isDocument ? documents : datasets).map((d) => d.alias),
+    },
     req,
   });
 
@@ -158,20 +199,33 @@ export async function POST(req: Request, { params }: Params) {
 
       send("meta", { messageId: assistantMsg.id });
 
-      const result = await runAgentTurn({
-        conversationId: id,
-        question,
-        datasets,
-        history,
-        isFollowUp,
-        persona: membership?.persona ?? null,
-        org: { domain: conversation.org.domain, vertical: conversation.org.vertical },
-        effort,
-        emit: (e) => send(e.type, e),
-        // The run continues even if the client disconnects; it settles and
-        // persists so the user can reload. Only explicit cancel aborts.
-        signal: abort.signal,
-      });
+      const result = isDocument
+        ? await runDocumentTurn({
+            conversationId: id,
+            question,
+            documents,
+            history,
+            isFollowUp,
+            persona: membership?.persona ?? null,
+            org: { domain: conversation.org.domain, vertical: conversation.org.vertical },
+            effort,
+            emit: (e) => send(e.type, e),
+            signal: abort.signal,
+          })
+        : await runAgentTurn({
+            conversationId: id,
+            question,
+            datasets,
+            history,
+            isFollowUp,
+            persona: membership?.persona ?? null,
+            org: { domain: conversation.org.domain, vertical: conversation.org.vertical },
+            effort,
+            emit: (e) => send(e.type, e),
+            // The run continues even if the client disconnects; it settles and
+            // persists so the user can reload. Only explicit cancel aborts.
+            signal: abort.signal,
+          });
 
       await prisma.message.update({
         where: { id: assistantMsg.id },

@@ -39,6 +39,17 @@ IMPORTANT: decision-support questions ARE your core job, not off-topic. "What sh
  * over the base workflow where they conflict (e.g. quick_fact suppresses the
  * final_report requirement the base prompt otherwise asks for).
  */
+/** "## Who you're helping" block — persona framing + org domain/vertical. */
+function whoBlock(pack: ContextPack): string | null {
+  const who: string[] = [];
+  if (pack.persona) who.push(pack.persona.framing);
+  const orgBits: string[] = [];
+  if (pack.org.domain) orgBits.push(`Business context: ${pack.org.domain}.`);
+  if (pack.org.vertical) orgBits.push(`Industry vertical: ${pack.org.vertical}.`);
+  if (orgBits.length) who.push(orgBits.join(" "));
+  return who.length ? `## Who you're helping\n${who.join("\n\n")}` : null;
+}
+
 export function buildSystemPrompt(
   pack: ContextPack,
   mode: AnalysisMode,
@@ -46,16 +57,8 @@ export function buildSystemPrompt(
 ): string {
   const parts: string[] = [];
 
-  // ## Who you're helping — persona framing + org domain/vertical (omit if absent).
-  const who: string[] = [];
-  if (pack.persona) who.push(pack.persona.framing);
-  const orgBits: string[] = [];
-  if (pack.org.domain) orgBits.push(`Business context: ${pack.org.domain}.`);
-  if (pack.org.vertical) orgBits.push(`Industry vertical: ${pack.org.vertical}.`);
-  if (orgBits.length) who.push(orgBits.join(" "));
-  if (who.length) {
-    parts.push(`## Who you're helping\n${who.join("\n\n")}`);
-  }
+  const who = whoBlock(pack);
+  if (who) parts.push(who);
 
   // ## Response mode — an explicit override of the workflow below where they conflict.
   const modeRule =
@@ -74,6 +77,61 @@ export function buildSystemPrompt(
   if (effort === "low" || effort === "medium") {
     parts.push(
       "This may involve multi-step reasoning — inspect the data (dtypes, ranges, missing values) first, work in small steps, and don't shortcut to an answer.",
+    );
+  }
+
+  return parts.join("\n\n");
+}
+
+// ── Document pillar (v3 §14) ──────────────────────────────────────────────────
+
+export const DOCUMENT_SYSTEM_PROMPT = `You are Glass Box, a sharp, senior document analyst working inside a governed workspace. The user loaded one or more documents (an RFP, contract, policy, requirements spec, or report) and you answer questions about them in a live, visible loop. Every claim you make MUST be grounded in — and cited to — the actual text. Citations are your "glass box": they are how the user verifies your answer against the source, exactly as executed Python is for tabular analysis.
+
+## Scope — non-negotiable
+You answer ONLY from the loaded document(s). If the user asks something with NO connection to these documents (world events, general knowledge, other files), politely decline in one or two sentences and steer back. Never invent clauses, numbers, requirements, or terms that are not in the text.
+
+## Environment & tools
+- \`search_document(query)\` — retrieve the passages relevant to a question. ALWAYS search BEFORE answering; never answer document questions from memory. Each result carries an [anchor] token and its section — search several times with different phrasings to gather ALL the relevant evidence.
+- \`cite(anchor, quote)\` — record verbatim evidence for a claim, using the exact anchor from a search result and an exact quote from that passage. CITE EVERY material claim, requirement, obligation, number, and term. Uncited assertions are not acceptable.
+- \`extract(title, columns, rows)\` — compile a structured list (every requirement, obligation, deadline, SLA, price). Use it for "extract every X" / "list all Y" requests; cite the important rows.
+
+## How to work
+1. Open with a brief plan (1-3 sentences): what you'll look for and why.
+2. Search the document(s) with several targeted queries. Read the returned passages before concluding.
+3. Ground every statement in cited text. For "does X satisfy the RFP?" style questions, cite BOTH the requirement AND the evidence for/against it, and be explicit about gaps.
+4. For requirement/obligation extraction, classify where the text supports it (e.g. mandatory "shall/must" vs. optional "may/should" vs. informational).
+5. Quote precisely; never paraphrase inside a \`cite\` quote. If the documents do not answer the question, say so plainly rather than guessing.
+
+## Concluding
+- For a review/extraction/compliance request, conclude with \`final_report\` — a structured deliverable (findings with the citations behind them). The app composes the polished report when you call it; don't write conclusions as prose.
+- For a trivial lookup, answer directly in 1-3 sentences (still grounded in a search) and do NOT call final_report.`;
+
+/**
+ * Compose the system prompt for a DOCUMENT run: persona/org "who you're helping"
+ * header, a response-mode line, the document base prompt, and (for low/medium
+ * effort) the anti-shortcut nudge.
+ */
+export function buildDocumentSystemPrompt(
+  pack: ContextPack,
+  mode: AnalysisMode,
+  effort: "low" | "medium" | "high",
+): string {
+  const parts: string[] = [];
+
+  const who = whoBlock(pack);
+  if (who) parts.push(who);
+
+  const modeRule =
+    mode === "quick_fact"
+      ? "This is a quick lookup — run one focused search, then answer in 1-3 grounded sentences with a citation. Do NOT call final_report."
+      : "This is a document review — search thoroughly, cite every material point, and conclude with final_report (follow the workflow below in full).";
+  parts.push(`## Response mode (OVERRIDES the workflow below where they conflict)\n${modeRule}`);
+
+  parts.push(DOCUMENT_SYSTEM_PROMPT);
+
+  if (effort === "low" || effort === "medium") {
+    parts.push(
+      "This involves multi-step reasoning — search the document(s) from several angles first, read the passages, and don't shortcut to an answer. Reach for search_document eagerly; do not answer without it.",
     );
   }
 

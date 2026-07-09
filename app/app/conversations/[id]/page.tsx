@@ -3,6 +3,7 @@ import { getActiveOrg } from "@/lib/activeOrg";
 import { prisma } from "@/lib/db";
 import { ConversationWorkspace } from "@/components/app/ConversationWorkspace";
 import { PERSONA_FRAMING } from "@/lib/agent/personas";
+import { isDocProfile, type DocProfile } from "@/lib/agent/context";
 import type { AgentEvent } from "@/lib/agent/events";
 import type { AnalysisEffort, Persona } from "@/lib/generated/prisma/enums";
 
@@ -22,8 +23,8 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
       include: {
         sources: {
           include: {
-            source: { select: { id: true, name: true } },
-            version: { select: { id: true, version: true, sampled: true, rowCount: true } },
+            source: { select: { id: true, name: true, kind: true } },
+            version: { select: { id: true, version: true, sampled: true, rowCount: true, profile: true } },
           },
         },
         messages: { orderBy: { createdAt: "asc" } },
@@ -39,12 +40,28 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
 
   const persona = (membership?.persona as Persona | null) ?? null;
 
+  // Document profile summaries for the context strip (v3 §14.4 / UI §9).
+  const documents = c.sources
+    .filter((l) => l.source.kind === "DOCUMENT" && isDocProfile(l.version.profile))
+    .map((l) => {
+      const p = l.version.profile as unknown as DocProfile;
+      return {
+        name: l.source.name,
+        docType: p.docType,
+        description: p.description,
+        pageCount: p.pageCount,
+        wordCount: p.wordCount,
+        sectionCount: p.sections.length,
+      };
+    });
+
   return (
     <ConversationWorkspace
       orgId={org.id}
       myRole={org.role}
       personaLabel={persona ? PERSONA_FRAMING[persona].label : null}
       domain={orgRow?.domain ?? null}
+      documents={documents}
       conversation={{
         id: c.id,
         title: c.title,

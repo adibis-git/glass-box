@@ -221,18 +221,29 @@ function RunBlock({
   );
 }
 
+interface DocSummary {
+  name: string;
+  docType: string;
+  description: string;
+  pageCount: number;
+  wordCount: number;
+  sectionCount: number;
+}
+
 export function ConversationWorkspace({
   orgId,
   myRole,
   conversation,
   personaLabel,
   domain,
+  documents,
 }: {
   orgId: string;
   myRole: Role;
   conversation: ConversationProp;
   personaLabel?: string | null;
   domain?: string | null;
+  documents?: DocSummary[];
 }) {
   const router = useRouter();
   const canAsk = myRole !== "VIEWER";
@@ -353,6 +364,23 @@ export function ConversationWorkspace({
               </span>
             )}
             {domain && <span className="truncate">Context: {domain}</span>}
+          </div>
+        )}
+        {documents && documents.length > 0 && (
+          <div className="mt-1.5 space-y-1">
+            {documents.map((d) => (
+              <div key={d.name} className="flex flex-wrap items-baseline gap-1.5 text-[11px] text-muted">
+                <span className="rounded border border-blue/30 bg-blue/10 px-1.5 py-0.5 uppercase tracking-wide text-blue">
+                  {d.docType}
+                </span>
+                <span className="text-foreground/80">{d.name}</span>
+                <span>
+                  {d.pageCount} page{d.pageCount === 1 ? "" : "s"} · {fmtInt(d.wordCount)} words ·{" "}
+                  {d.sectionCount} section{d.sectionCount === 1 ? "" : "s"}
+                </span>
+                {d.description && <span className="w-full truncate text-muted/90">{d.description}</span>}
+              </div>
+            ))}
           </div>
         )}
       </div>

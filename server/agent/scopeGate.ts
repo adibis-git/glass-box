@@ -191,3 +191,72 @@ export async function classifyIntent(
   if (text === null) return { inScope: true, intent: "analytical" }; // fail open
   return parseIntent(text) ?? { inScope: true, intent: "analytical" };
 }
+
+// ── Document intent (v3 §6/§14) ───────────────────────────────────────────────
+
+function buildDocumentIntentPrompt(
+  question: string,
+  documents: { alias: string; name: string; docType?: string }[],
+): string {
+  const desc = documents
+    .map((d) => `- ${d.alias} ("${d.name}"${d.docType ? `, a ${d.docType}` : ""})`)
+    .join("\n");
+  return `You are a router for a document-analysis companion. It reads the following loaded document(s) and answers questions by retrieving and citing passages:
+
+${desc}
+
+Question: "${question}"
+
+Decide TWO things.
+
+1. SCOPE — can this be answered from the loaded document(s)? IN scope: anything about their content — summaries, requirements, obligations, terms, risks, compliance ("does X satisfy the RFP?"), extraction, comparisons. OUT of scope: questions with no connection to these documents (world events, general knowledge, other files). Lean in-scope whenever the documents could inform the question.
+
+2. INTENT:
+   - "quick_fact": a trivial lookup answerable in a sentence ("what's the submission deadline?", "who is the issuing party?", "what's the contract value?").
+   - "document_review": anything substantive — summarize, extract every requirement/obligation, assess compliance or risk, "does our proposal satisfy the RFP?", "what changed?". Default to this when unsure.
+
+Respond with ONLY a JSON object, no other text:
+{"in_scope": true, "intent": "quick_fact" | "document_review"}
+or, if out of scope:
+{"in_scope": false, "intent": "document_review", "refusal": "one or two friendly sentences declining and steering back to the loaded document(s)"}`;
+}
+
+function parseDocumentIntent(text: string): IntentVerdict | null {
+  try {
+    const first = text.indexOf("{");
+    const last = text.lastIndexOf("}");
+    if (first === -1 || last <= first) return null;
+    const j = JSON.parse(text.slice(first, last + 1)) as {
+      in_scope?: boolean;
+      intent?: string;
+      refusal?: string;
+    };
+    if (typeof j.in_scope !== "boolean") return null;
+    const intent: AnalysisMode = j.intent === "quick_fact" ? "quick_fact" : "document_review";
+    return {
+      inScope: j.in_scope,
+      intent,
+      refusal:
+        typeof j.refusal === "string" && j.refusal.trim()
+          ? j.refusal.trim()
+          : "I can only answer from the document(s) loaded in this conversation — ask me about those instead.",
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Scope + intent for a DOCUMENT conversation. Fails OPEN to an in-scope,
+ * document_review verdict so a flaky classifier never blocks legitimate review.
+ */
+export async function classifyDocumentIntent(
+  question: string,
+  documents: { alias: string; name: string; docType?: string }[],
+  provider: "anthropic" | "openrouter",
+  apiKey: string,
+): Promise<IntentVerdict> {
+  const text = await runClassifier(buildDocumentIntentPrompt(question, documents), provider, apiKey);
+  if (text === null) return { inScope: true, intent: "document_review" }; // fail open
+  return parseDocumentIntent(text) ?? { inScope: true, intent: "document_review" };
+}

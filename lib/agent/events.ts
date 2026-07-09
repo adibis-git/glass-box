@@ -19,6 +19,19 @@ export type AgentEvent =
     }
   | { type: "chart"; id: string; spec: ChartSpec }
   | {
+      /**
+       * A citation recorded by the document engine — the doc-mode "glass box"
+       * equivalent of showing executed Python (v3 §14.3). `anchor` is the token
+       * the model echoed from a retrieved passage; `section` is its nearest
+       * heading (for a human-readable label).
+       */
+      type: "cite";
+      id: string;
+      anchor: string;
+      quote: string;
+      section?: string;
+    }
+  | {
       /** Prominent inline notice — e.g. an out-of-scope refusal. */
       type: "notice";
       id: string;

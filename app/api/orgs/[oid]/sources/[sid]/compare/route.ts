@@ -6,11 +6,17 @@
 import { prisma } from "@/lib/db";
 import { authorize, authzErrorResponse } from "@/lib/authz";
 import { audit } from "@/lib/audit";
+import { getStorage } from "@/server/storage";
 import {
   computeTabularDiff,
   summarizeTabularDiff,
+  computeDocumentDiff,
+  summarizeDocumentDiff,
   type TabularDiff,
+  type DocumentDiff,
 } from "@/lib/agent/versionDiff";
+import { isDocProfile } from "@/lib/agent/context";
+import type { DocProfile } from "@/lib/agent/context";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
 export const runtime = "nodejs";
@@ -54,20 +60,37 @@ export async function GET(req: Request, { params }: Params) {
       return Response.json({ error: "One or both versions were not found." }, { status: 404 });
     }
 
-    const structural = computeTabularDiff(
-      {
-        version: fromV.version,
-        rowCount: fromV.rowCount,
-        columnSchema: (fromV.columnSchema as Column[] | null) ?? [],
-      },
-      {
-        version: toV.version,
-        rowCount: toV.rowCount,
-        columnSchema: (toV.columnSchema as Column[] | null) ?? [],
-      },
-    );
-    const summary = await summarizeTabularDiff(source.name, structural);
-    const result: TabularDiff = { ...structural, summary };
+    let result: TabularDiff | DocumentDiff;
+    if (source.kind === "DOCUMENT") {
+      // Document diff (v3 §15.2): section-level text diff + Claude semantic summary.
+      const storage = getStorage();
+      const [fromText, toText] = await Promise.all([
+        storage.getText(fromV.extractedTextKey ?? fromV.storageKey).catch(() => ""),
+        storage.getText(toV.extractedTextKey ?? toV.storageKey).catch(() => ""),
+      ]);
+      const fromProfile = isDocProfile(fromV.profile) ? (fromV.profile as DocProfile) : null;
+      const toProfile = isDocProfile(toV.profile) ? (toV.profile as DocProfile) : null;
+      const fromSnap = { version: fromV.version, text: fromText, sections: fromProfile?.sections ?? [] };
+      const toSnap = { version: toV.version, text: toText, sections: toProfile?.sections ?? [] };
+      const structural = computeDocumentDiff(fromSnap, toSnap);
+      const summary = await summarizeDocumentDiff(source.name, structural, fromSnap, toSnap);
+      result = { ...structural, summary };
+    } else {
+      const structural = computeTabularDiff(
+        {
+          version: fromV.version,
+          rowCount: fromV.rowCount,
+          columnSchema: (fromV.columnSchema as Column[] | null) ?? [],
+        },
+        {
+          version: toV.version,
+          rowCount: toV.rowCount,
+          columnSchema: (toV.columnSchema as Column[] | null) ?? [],
+        },
+      );
+      const summary = await summarizeTabularDiff(source.name, structural);
+      result = { ...structural, summary };
+    }
 
     // Cache (best-effort; a race just re-serves the winner).
     await prisma.comparison

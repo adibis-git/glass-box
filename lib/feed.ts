@@ -17,6 +17,7 @@ export type FeedItem =
       blocked?: boolean;
       timedOut?: boolean;
     }
+  | { kind: "cite"; id: string; anchor: string; quote: string; section?: string }
   | { kind: "insight"; id: string; report: FinalReport };
 
 export type RunStatus = "idle" | "running" | "done" | "error";
@@ -130,6 +131,21 @@ export function feedReducer(state: FeedState, action: FeedAction): FeedState {
       return {
         ...state,
         charts: [...state.charts, { id: action.id, spec: action.spec }],
+      };
+
+    case "cite":
+      return {
+        ...state,
+        feed: [
+          ...state.feed,
+          {
+            kind: "cite",
+            id: action.id,
+            anchor: action.anchor,
+            quote: action.quote,
+            section: action.section,
+          },
+        ],
       };
 
     case "notice":

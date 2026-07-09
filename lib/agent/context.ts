@@ -9,7 +9,7 @@
 import type { Persona, AnalysisEffort } from "@/lib/generated/prisma/client";
 import { PERSONA_FRAMING } from "@/lib/agent/personas";
 
-export type AnalysisMode = "quick_fact" | "analytical" | "decision";
+export type AnalysisMode = "quick_fact" | "analytical" | "decision" | "document_review";
 
 /** Per-column semantic profile computed at ingest (server/ingest/profile.ts). */
 export interface ColumnProfile {
@@ -37,6 +37,39 @@ export interface DatasetDomain {
 export interface DatasetProfile {
   columns: ColumnProfile[];
   domain?: DatasetDomain;
+}
+
+// ── Document intelligence (v3 §14) ────────────────────────────────────────────
+
+/** One heading in a document's outline, with a stable char-offset anchor. */
+export interface DocSection {
+  heading: string;
+  /** Opaque anchor token the citation tools echo back, e.g. "c1234". */
+  anchor: string;
+}
+
+/**
+ * Document "domain read" (v3 §14.4), persisted at SourceVersion.profile for
+ * DOCUMENT sources. The `kind: "document"` discriminator distinguishes it from
+ * the tabular DatasetProfile (which carries `columns`) when read back.
+ */
+export interface DocProfile {
+  kind: "document";
+  docType: "rfp" | "requirements" | "contract" | "policy" | "report" | "other";
+  description: string; // Claude domain read
+  sections: DocSection[]; // outline for citation (deterministic anchors)
+  keyEntities: string[]; // parties, dates, obligations, amounts
+  pageCount: number;
+  wordCount: number;
+}
+
+/** Narrow a persisted `profile` Json to a DocProfile (vs. a tabular profile). */
+export function isDocProfile(profile: unknown): profile is DocProfile {
+  return (
+    !!profile &&
+    typeof profile === "object" &&
+    (profile as { kind?: unknown }).kind === "document"
+  );
 }
 
 export interface DatasetContext {

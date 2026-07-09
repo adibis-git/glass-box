@@ -36,7 +36,7 @@ export function UploadButton({ orgId }: { orgId: string }) {
       <input
         ref={fileRef}
         type="file"
-        accept=".csv,.tsv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+        accept=".csv,.tsv,.xlsx,.xls,.pdf,.docx,.doc,.txt,.md,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/plain"
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
@@ -45,7 +45,7 @@ export function UploadButton({ orgId }: { orgId: string }) {
         }}
       />
       <Button variant="primary" size="sm" disabled={busy} onClick={() => fileRef.current?.click()}>
-        {busy ? "Uploading…" : "⬆ Upload CSV / Excel"}
+        {busy ? "Uploading…" : "⬆ Upload CSV / Excel / PDF / DOCX"}
       </Button>
       {error && <span className="text-xs text-red">{error}</span>}
     </div>

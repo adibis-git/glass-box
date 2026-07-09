@@ -181,7 +181,8 @@ model SourceVersion {
   sampleRows         Json? // first 20 rows (what the LLM sees)
   sampled            Boolean       @default(false) // strided-sample flag
   normalizations     Json? // applied cleanups, shown in UI
-  profile            Json? // ColumnProfile[] + DatasetDomain — source intelligence (v3 §4)
+  extractedTextKey   String? // document sources: storage key for extracted text/sections (v3 §14.1)
+  profile            Json? // ColumnProfile[]+DatasetDomain (tabular) OR DocProfile (document) — source intelligence (v3 §4/§14.4)
   status             DatasetStatus @default(PROCESSING)
   errorMessage       String?
   deletedAt          DateTime? // soft delete
