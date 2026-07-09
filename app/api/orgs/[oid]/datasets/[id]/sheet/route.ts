@@ -3,6 +3,9 @@ import { authorize, authzErrorResponse } from "@/lib/authz";
 import { audit } from "@/lib/audit";
 import { getStorage } from "@/server/storage";
 import { ingestBuffer, IngestError } from "@/server/ingest";
+import { computeColumnProfiles } from "@/server/ingest/profile";
+import { describeDataset } from "@/lib/agent/datasetIntelligence";
+import type { DatasetProfile } from "@/lib/agent/context";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
 export const runtime = "nodejs";
@@ -42,6 +45,19 @@ export async function POST(req: Request, { params }: Params) {
     const normalizedKey = `org/${oid}/datasets/${d.id}/normalized.csv`;
     await storage.put(normalizedKey, result.normalizedCsv!);
 
+    // Source intelligence (v3 §4) — profile the columns + cache a domain read.
+    // Fail-soft: a profiling failure must never block the sheet-pick finalization.
+    let profile: DatasetProfile | undefined;
+    try {
+      if (result.sampleRows && result.columnSchema) {
+        const columns = computeColumnProfiles(result.sampleRows, result.columnSchema);
+        const domain = await describeDataset(d.name, columns, result.sampleRows);
+        profile = { columns, ...(domain ? { domain } : {}) };
+      }
+    } catch {
+      profile = undefined;
+    }
+
     const updated = await prisma.dataset.update({
       where: { id: d.id },
       data: {
@@ -51,6 +67,7 @@ export async function POST(req: Request, { params }: Params) {
         columnSchema: result.columnSchema as unknown as Prisma.InputJsonValue,
         sampleRows: result.sampleRows as unknown as Prisma.InputJsonValue,
         normalizations: result.normalizations as unknown as Prisma.InputJsonValue,
+        ...(profile ? { profile: profile as unknown as Prisma.InputJsonValue } : {}),
         status: "READY",
         errorMessage: null,
       },

@@ -4,7 +4,7 @@
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import type { Role } from "@/lib/generated/prisma/enums";
+import type { Role, Persona } from "@/lib/generated/prisma/enums";
 
 const RANK: Record<Role, number> = { VIEWER: 0, MEMBER: 1, ADMIN: 2, OWNER: 3 };
 
@@ -21,6 +21,7 @@ export interface Ctx {
   email: string;
   orgId: string;
   role: Role;
+  persona: Persona | null;
 }
 
 /** Throws AuthzError(401) when unauthenticated, (403) when role is insufficient. */
@@ -31,7 +32,7 @@ export async function authorize(orgId: string, required: Role): Promise<Ctx> {
 
   const membership = await prisma.membership.findUnique({
     where: { userId_orgId: { userId, orgId } },
-    select: { role: true },
+    select: { role: true, persona: true },
   });
   if (!membership || RANK[membership.role] < RANK[required]) {
     throw new AuthzError(403, "You don't have permission to do that in this organization.");
@@ -41,6 +42,7 @@ export async function authorize(orgId: string, required: Role): Promise<Ctx> {
     email: session.user.email ?? "",
     orgId,
     role: membership.role,
+    persona: membership.persona,
   };
 }
 

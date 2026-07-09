@@ -8,13 +8,14 @@
 //      where { done } carries an Anthropic-shaped final message.
 
 import { AGENT_TOOLS } from "@/lib/agent/tools";
-import { SYSTEM_PROMPT } from "@/lib/agent/systemPrompt";
 import { REPORT_INSTRUCTION, extractReport } from "@/lib/agent/report";
 import type { ContentBlock, FinalReport } from "@/lib/types";
 import type { AgentRequest, FinalMessage, SseWrite } from "./shared";
 
 const MODEL = "anthropic/claude-sonnet-5";
 const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
+
+type Effort = "low" | "medium" | "high";
 
 // --- Anthropic history -> OpenAI messages ---
 interface OAIMessage {
@@ -28,8 +29,8 @@ interface OAIMessage {
   }[];
 }
 
-function toOpenAIMessages(messages: AgentRequest["messages"]): OAIMessage[] {
-  const out: OAIMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
+function toOpenAIMessages(messages: AgentRequest["messages"], system: string): OAIMessage[] {
+  const out: OAIMessage[] = [{ role: "system", content: system }];
 
   for (const m of messages) {
     if (m.role === "user") {
@@ -126,15 +127,16 @@ export async function runOpenRouterTurn(
   write: SseWrite,
   body: AgentRequest,
   apiKey: string,
+  system: string,
+  effort: Effort,
 ): Promise<void> {
   const reqBody = {
     model: MODEL,
-    messages: toOpenAIMessages(body.messages),
+    messages: toOpenAIMessages(body.messages, system),
     tools: OAI_TOOLS,
     tool_choice: "auto",
-    // Disable reasoning: lower latency, and (usefully) makes the agent more
-    // likely to hit and then visibly self-correct the messy-column error.
-    reasoning: { effort: "none" },
+    // The user-selectable effort dial (defaults to LOW) scales reasoning.
+    reasoning: { effort },
     max_tokens: 8192,
     stream: true,
     stream_options: { include_usage: true },
@@ -272,8 +274,10 @@ export async function runOpenRouterTurn(
 export async function generateOpenRouterReport(
   messages: AgentRequest["messages"],
   apiKey: string,
+  system: string,
+  effort: Effort,
 ): Promise<FinalReport> {
-  const oai = toOpenAIMessages(messages);
+  const oai = toOpenAIMessages(messages, system);
   oai.push({ role: "user", content: REPORT_INSTRUCTION });
 
   const resp = await fetch(ENDPOINT, {
@@ -287,7 +291,7 @@ export async function generateOpenRouterReport(
     body: JSON.stringify({
       model: MODEL,
       messages: oai,
-      reasoning: { effort: "none" },
+      reasoning: { effort },
       max_tokens: 2500,
       stream: false,
     }),

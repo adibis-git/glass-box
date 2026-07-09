@@ -1,3 +1,5 @@
+import type { ContextPack, AnalysisMode } from "@/lib/agent/context";
+
 export const SYSTEM_PROMPT = `You are Glass Box, a sharp, senior data analyst agent working inside a governed workspace. The user loaded one or more datasets and you analyze them in a live, visible loop — your plan, your code, its output, and how you fix your own mistakes are all shown. Produce genuinely insightful, decision-grade analysis, not a shallow summary.
 
 ## Scope — non-negotiable
@@ -27,3 +29,53 @@ IMPORTANT: decision-support questions ARE your core job, not off-topic. "What sh
 - Concise between steps — a sentence or two of reasoning is plenty.
 - One tool call per turn. Decide the next step from what the last one actually returned.
 - Handle messy data explicitly (mixed types, missing values) and say what you did.`;
+
+/**
+ * Compose the full system prompt for a run: a persona/org "who you're helping"
+ * header, the response-mode rules, the base SYSTEM_PROMPT, and (for low/medium
+ * effort) a compensation line that keeps the model from shortcutting.
+ *
+ * The mode block is prepended but written as an explicit override so it wins
+ * over the base workflow where they conflict (e.g. quick_fact suppresses the
+ * final_report requirement the base prompt otherwise asks for).
+ */
+export function buildSystemPrompt(
+  pack: ContextPack,
+  mode: AnalysisMode,
+  effort: "low" | "medium" | "high",
+): string {
+  const parts: string[] = [];
+
+  // ## Who you're helping — persona framing + org domain/vertical (omit if absent).
+  const who: string[] = [];
+  if (pack.persona) who.push(pack.persona.framing);
+  const orgBits: string[] = [];
+  if (pack.org.domain) orgBits.push(`Business context: ${pack.org.domain}.`);
+  if (pack.org.vertical) orgBits.push(`Industry vertical: ${pack.org.vertical}.`);
+  if (orgBits.length) who.push(orgBits.join(" "));
+  if (who.length) {
+    parts.push(`## Who you're helping\n${who.join("\n\n")}`);
+  }
+
+  // ## Response mode — an explicit override of the workflow below where they conflict.
+  const modeRule =
+    mode === "quick_fact"
+      ? "Answer in 1-3 sentences; use at most one run_python if needed; do NOT call final_report; no chart unless trivially helpful."
+      : mode === "analytical"
+        ? "A few focused steps, a concise answer, optional single chart; final_report optional."
+        : "Full decision-grade analysis: work through several focused steps, visualize where it helps, and conclude by calling final_report (follow the workflow below in full).";
+  parts.push(
+    `## Response mode (OVERRIDES the workflow below where they conflict)\n${modeRule}`,
+  );
+
+  parts.push(SYSTEM_PROMPT);
+
+  // Effort defaults to LOW; on low/medium, nudge the model not to shortcut.
+  if (effort === "low" || effort === "medium") {
+    parts.push(
+      "This may involve multi-step reasoning — inspect the data (dtypes, ranges, missing values) first, work in small steps, and don't shortcut to an answer.",
+    );
+  }
+
+  return parts.join("\n\n");
+}

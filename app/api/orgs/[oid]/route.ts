@@ -13,12 +13,19 @@ export async function PATCH(req: Request, { params }: Params) {
     const body = (await req.json().catch(() => ({}))) as {
       name?: string;
       retentionDays?: number | null;
+      domain?: string | null;
+      vertical?: string | null;
     };
 
     const wantsRename = body.name !== undefined;
     const ctx = await authorize(oid, wantsRename ? "OWNER" : "ADMIN");
 
-    const data: { name?: string; retentionDays?: number | null } = {};
+    const data: {
+      name?: string;
+      retentionDays?: number | null;
+      domain?: string | null;
+      vertical?: string | null;
+    } = {};
     if (wantsRename) {
       const name = String(body.name ?? "").trim();
       if (!name) return Response.json({ error: "Name cannot be empty." }, { status: 400 });
@@ -29,6 +36,15 @@ export async function PATCH(req: Request, { params }: Params) {
         return Response.json({ error: "retentionDays must be a positive integer or null." }, { status: 400 });
       }
       data.retentionDays = body.retentionDays;
+    }
+    // Workspace framing (v3 §3) — ADMIN+ (covered by the authorize above).
+    if (body.domain !== undefined) {
+      const domain = String(body.domain ?? "").trim();
+      data.domain = domain || null;
+    }
+    if (body.vertical !== undefined) {
+      const vertical = String(body.vertical ?? "").trim();
+      data.vertical = vertical || null;
     }
 
     const org = await prisma.organization.update({ where: { id: oid }, data });

@@ -27,6 +27,12 @@ export type AgentEvent =
     }
   | { type: "report_pending" }
   | { type: "report"; id: string; report: FinalReport }
+  | {
+      /** Suggested next-step questions, emitted after the run settles (v3 §5). */
+      type: "suggestions";
+      id: string;
+      questions: string[];
+    }
   | { type: "step"; current: number; max: number }
   | { type: "usage"; inputTokens: number; outputTokens: number }
   | {

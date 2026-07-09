@@ -4,6 +4,7 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { audit } from "@/lib/audit";
+import { Persona } from "@/lib/generated/prisma/enums";
 
 export const runtime = "nodejs";
 
@@ -32,7 +33,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "Too many signups. Try again later." }, { status: 429 });
   }
 
-  let body: { email?: string; password?: string; name?: string; orgName?: string };
+  let body: { email?: string; password?: string; name?: string; orgName?: string; persona?: string };
   try {
     body = await req.json();
   } catch {
@@ -61,6 +62,12 @@ export async function POST(req: Request) {
   const passwordHash = await bcrypt.hash(password, 12);
   const orgName = String(body.orgName ?? "").trim() || `${name.split(" ")[0]}'s workspace`;
 
+  // Optional functional role → persona-aware framing (v3 §3).
+  const persona =
+    body.persona && (Object.values(Persona) as string[]).includes(body.persona)
+      ? (body.persona as Persona)
+      : null;
+
   const { user, org } = await prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: { email, name, passwordHash },
@@ -69,7 +76,7 @@ export async function POST(req: Request) {
       data: {
         name: orgName,
         slug: slugify(orgName),
-        memberships: { create: { userId: user.id, role: "OWNER" } },
+        memberships: { create: { userId: user.id, role: "OWNER", persona } },
       },
     });
     return { user, org };

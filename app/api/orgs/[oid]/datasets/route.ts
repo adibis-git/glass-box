@@ -3,6 +3,9 @@ import { authorize, authzErrorResponse } from "@/lib/authz";
 import { audit } from "@/lib/audit";
 import { getStorage } from "@/server/storage";
 import { ingestBuffer, IngestError, CSV_MAX } from "@/server/ingest";
+import { computeColumnProfiles } from "@/server/ingest/profile";
+import { describeDataset } from "@/lib/agent/datasetIntelligence";
+import type { DatasetProfile } from "@/lib/agent/context";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
 export const runtime = "nodejs";
@@ -92,6 +95,21 @@ export async function POST(req: Request, { params }: Params) {
     const normalizedKey = `org/${oid}/datasets/${id}/normalized.csv`;
     await storage.put(normalizedKey, result.normalizedCsv!);
 
+    // Source intelligence (v3 §4): profile columns + a cached Claude domain read.
+    // Fail-soft — a profiling error must never block the upload; profile is omitted.
+    let profile: Prisma.InputJsonValue | undefined;
+    try {
+      const columns = computeColumnProfiles(
+        result.sampleRows ?? [],
+        result.columnSchema ?? [],
+      );
+      const domain = await describeDataset(name, columns, result.sampleRows ?? []);
+      const built: DatasetProfile = { columns, ...(domain ? { domain } : {}) };
+      profile = built as unknown as Prisma.InputJsonValue;
+    } catch {
+      profile = undefined;
+    }
+
     const dataset = await prisma.dataset.create({
       data: {
         orgId: oid,
@@ -107,6 +125,7 @@ export async function POST(req: Request, { params }: Params) {
         sampleRows: result.sampleRows as unknown as Prisma.InputJsonValue,
         sampled: result.sampled ?? false,
         normalizations: result.normalizations as unknown as Prisma.InputJsonValue,
+        ...(profile ? { profile } : {}),
         status: "READY",
         purgeAt: await purgeAtFor(oid),
       },

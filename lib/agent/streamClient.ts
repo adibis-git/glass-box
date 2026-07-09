@@ -20,13 +20,14 @@ export async function streamQuestion(
   question: string,
   handlers: StreamHandlers,
   signal?: AbortSignal,
+  effort?: string,
 ): Promise<void> {
   let resp: Response;
   try {
     resp = await fetch(`/api/orgs/${orgId}/conversations/${conversationId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify(effort ? { question, effort } : { question }),
       signal,
     });
   } catch (e) {

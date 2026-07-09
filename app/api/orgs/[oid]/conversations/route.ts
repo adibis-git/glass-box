@@ -1,6 +1,13 @@
 import { prisma } from "@/lib/db";
 import { authorize, authzErrorResponse } from "@/lib/authz";
 import { audit } from "@/lib/audit";
+import { generateStarterQuestions } from "@/lib/agent/suggestions";
+import {
+  buildContextPack,
+  type ColumnProfile,
+  type DatasetContext,
+  type DatasetDomain,
+} from "@/lib/agent/context";
 
 export const runtime = "nodejs";
 
@@ -55,7 +62,7 @@ export async function POST(req: Request, { params }: Params) {
 
     const datasets = await prisma.dataset.findMany({
       where: { id: { in: links.map((l) => l.datasetId) }, orgId: oid, deletedAt: null, status: "READY" },
-      select: { id: true, name: true },
+      select: { id: true, name: true, rowCount: true, sampled: true, sampleRows: true, profile: true },
     });
     if (datasets.length !== links.length) {
       return Response.json(
@@ -83,6 +90,48 @@ export async function POST(req: Request, { params }: Params) {
       targetType: "conversation", targetId: conversation.id,
       metadata: { datasets: links }, req,
     });
+
+    // Persona × data starter questions — best-effort, never blocks creation.
+    try {
+      const [membership, org] = await Promise.all([
+        prisma.membership.findUnique({
+          where: { userId_orgId: { userId: ctx.userId, orgId: oid } },
+          select: { persona: true },
+        }),
+        prisma.organization.findUnique({
+          where: { id: oid },
+          select: { domain: true, vertical: true },
+        }),
+      ]);
+      const byId = new Map(datasets.map((d) => [d.id, d]));
+      const dctx: DatasetContext[] = links.map((l) => {
+        const d = byId.get(l.datasetId)!;
+        const raw = d.profile as { columns?: ColumnProfile[]; domain?: DatasetDomain } | null;
+        return {
+          alias: l.alias,
+          name: d.name,
+          rowCount: d.rowCount,
+          sampled: d.sampled,
+          columns: raw && Array.isArray(raw.columns) ? raw.columns : [],
+          domain: raw?.domain,
+          sampleRows: (d.sampleRows as Record<string, unknown>[]) ?? [],
+        };
+      });
+      const pack = buildContextPack({
+        persona: membership?.persona ?? null,
+        org: { domain: org?.domain, vertical: org?.vertical },
+        datasets: dctx,
+      });
+      const starterQuestions = await generateStarterQuestions(pack);
+      if (starterQuestions.length) {
+        await prisma.conversation.update({
+          where: { id: conversation.id },
+          data: { starterQuestions },
+        });
+      }
+    } catch (e) {
+      console.error("[conversations] starter-question generation failed:", e);
+    }
 
     return Response.json({ conversation }, { status: 201 });
   } catch (err) {

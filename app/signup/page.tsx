@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { AuthShell, Field } from "@/components/AuthCard";
 import { Button } from "@/components/ui/Button";
+import { PERSONA_OPTIONS } from "@/lib/agent/personas";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -13,6 +14,7 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [orgName, setOrgName] = useState("");
+  const [persona, setPersona] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -24,7 +26,7 @@ export default function SignupPage() {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, orgName }),
+        body: JSON.stringify({ name, email, password, orgName, persona: persona || undefined }),
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
@@ -91,6 +93,21 @@ export default function SignupPage() {
           onChange={(e) => setOrgName(e.target.value)}
           placeholder="Acme Analytics"
         />
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-medium text-muted">Your role (optional)</span>
+          <select
+            value={persona}
+            onChange={(e) => setPersona(e.target.value)}
+            className="h-10 w-full rounded-lg border border-border bg-panel-2 px-3 text-sm text-foreground outline-none focus:border-accent/60"
+          >
+            <option value="">Not specified</option>
+            {PERSONA_OPTIONS.map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </label>
         {error && <p className="text-xs text-red">{error}</p>}
         <Button type="submit" variant="primary" className="w-full" disabled={busy}>
           {busy ? "Creating account…" : "Create account"}

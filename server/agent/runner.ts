@@ -9,8 +9,19 @@
 import { runAnthropicTurn, generateAnthropicReport } from "@/lib/agent/providers/anthropic";
 import { runOpenRouterTurn, generateOpenRouterReport } from "@/lib/agent/providers/openrouter";
 import { getKernelRegistry, type DatasetRef } from "@/server/exec/registry";
-import { classifyScope } from "@/server/agent/scopeGate";
+import { classifyIntent } from "@/server/agent/scopeGate";
+import { buildSystemPrompt } from "@/lib/agent/systemPrompt";
+import {
+  buildContextPack,
+  effortLevel,
+  type AnalysisMode,
+  type ColumnProfile,
+  type DatasetContext,
+  type DatasetDomain,
+} from "@/lib/agent/context";
+import { generateFollowUps } from "@/lib/agent/suggestions";
 import type { AgentEvent } from "@/lib/agent/events";
+import type { Persona, AnalysisEffort } from "@/lib/generated/prisma/client";
 import type {
   ChartSpec,
   ChatMessage,
@@ -30,6 +41,8 @@ export interface RunnerDataset extends DatasetRef {
   sampled: boolean;
   columnSchema: { name: string; dtype: string }[];
   sampleRows: Record<string, unknown>[];
+  /** Parsed Dataset.profile — richer than columnSchema when present (v3 §4). */
+  profile?: { columns: ColumnProfile[]; domain?: DatasetDomain };
 }
 
 export interface RunnerInput {
@@ -39,6 +52,12 @@ export interface RunnerInput {
   /** Prior turns' apiMessages, already concatenated (follow-up context). */
   history: ChatMessage[];
   isFollowUp: boolean;
+  /** Who's asking — drives persona framing (v3 §3). */
+  persona: Persona | null;
+  /** Workspace framing (v3 §3). */
+  org: { domain?: string | null; vertical?: string | null };
+  /** User-selectable analysis depth; null → LOW (v3 §16.4). */
+  effort: AnalysisEffort | null;
   emit: (e: AgentEvent) => void;
   signal: AbortSignal;
 }
@@ -54,6 +73,10 @@ export interface RunnerOutput {
   error?: string;
   /** True when the scope gate refused the question (audited as such). */
   refused?: boolean;
+  /** Classified intent for this run (persisted to Message.intent). */
+  intent?: AnalysisMode;
+  /** Follow-up question chips (persisted to Message.suggestions). */
+  suggestions?: string[];
 }
 
 class AgentError extends Error {
@@ -83,33 +106,85 @@ function chooseProvider(): { provider: Provider; apiKey: string } {
   throw new AgentError("No model provider configured (set ANTHROPIC_API_KEY or OPENROUTER_API_KEY).", 500);
 }
 
-function buildKickoff(datasets: RunnerDataset[], question: string, isFollowUp: boolean): string {
-  if (isFollowUp) {
-    return `Follow-up question from the user: ${question}\n\nAnswer from the loaded dataframes, reusing what you already established where possible. Conclude with final_report.`;
+/** Render one column from the rich profile (falls back to name:dtype). */
+function renderColumn(c: ColumnProfile): string {
+  const bits = [`${c.name}: ${c.semanticType} (${c.dtype})`];
+  if (c.unit) bits.push(`unit=${c.unit}`);
+  if (c.range) bits.push(`range ${c.range.min}–${c.range.max}`);
+  if (c.cardinality != null) bits.push(`${c.cardinality} distinct`);
+  if (c.nullRate > 0) bits.push(`${Math.round(c.nullRate * 100)}% missing`);
+  if (c.topCategories?.length) {
+    const top = c.topCategories
+      .slice(0, 5)
+      .map((t) => `${t.value} (${t.count})`)
+      .join(", ");
+    bits.push(`top: ${top}`);
   }
-  const sections = datasets.map((d) => {
-    const cols = d.columnSchema.map((c) => `  - ${c.name}: ${c.dtype}`).join("\n");
-    return [
-      `### Dataframe \`${d.alias}\` — ${d.name}`,
-      d.sampled
-        ? `Rows: ${d.rowCount?.toLocaleString()} (REPRESENTATIVE SAMPLE of a larger file — rates/trends reliable, absolute totals are estimates)`
-        : `Rows: ${d.rowCount?.toLocaleString()}`,
-      `Columns:`,
-      cols,
-      `First ${Math.min(d.sampleRows.length, 20)} rows (JSON): ${JSON.stringify(d.sampleRows.slice(0, 20))}`,
-    ].join("\n");
-  });
+  return `  - ${bits.join("; ")}`;
+}
+
+function renderDataset(d: RunnerDataset): string {
+  const lines = [`### Dataframe \`${d.alias}\` — ${d.name}`];
+  lines.push(
+    d.sampled
+      ? `Rows: ${d.rowCount?.toLocaleString()} (REPRESENTATIVE SAMPLE of a larger file — rates/trends reliable, absolute totals are estimates)`
+      : `Rows: ${d.rowCount?.toLocaleString()}`,
+  );
+
+  const domain = d.profile?.domain;
+  if (domain) {
+    if (domain.description) lines.push(`What it is: ${domain.description}`);
+    if (domain.grain) lines.push(`Grain: ${domain.grain}`);
+    if (domain.metrics?.length) lines.push(`Key metrics: ${domain.metrics.join(", ")}`);
+    if (domain.entities?.length) lines.push(`Entities: ${domain.entities.join(", ")}`);
+    if (domain.timeColumns?.length) lines.push(`Time columns: ${domain.timeColumns.join(", ")}`);
+    if (domain.joinKeys?.length) lines.push(`Join keys: ${domain.joinKeys.join(", ")}`);
+  }
+
+  lines.push("Columns:");
+  if (d.profile?.columns?.length) {
+    lines.push(d.profile.columns.map(renderColumn).join("\n"));
+  } else {
+    lines.push(d.columnSchema.map((c) => `  - ${c.name}: ${c.dtype}`).join("\n"));
+  }
+
+  lines.push(
+    `First ${Math.min(d.sampleRows.length, 20)} rows (JSON): ${JSON.stringify(d.sampleRows.slice(0, 20))}`,
+  );
+  return lines.join("\n");
+}
+
+/** Mode-specific closing instruction; quick_fact/analytical must NOT require final_report. */
+function kickoffClosing(mode: AnalysisMode): string {
+  if (mode === "quick_fact") {
+    return "This is a quick lookup — answer directly in 1-3 sentences. Use at most one run_python if you truly need it, and do NOT call final_report.";
+  }
+  if (mode === "analytical") {
+    return "Take a few focused steps, then give a concise, quantified answer. A single chart is optional; final_report is optional — only call it if a structured deliverable genuinely helps.";
+  }
+  return "Begin with a brief analysis plan, then take your first step. Conclude with final_report.";
+}
+
+function buildKickoff(
+  datasets: RunnerDataset[],
+  question: string,
+  isFollowUp: boolean,
+  mode: AnalysisMode,
+): string {
+  if (isFollowUp) {
+    return `Follow-up question from the user: ${question}\n\nAnswer from the loaded dataframes, reusing what you already established where possible.\n\n${kickoffClosing(mode)}`;
+  }
   const q =
     question.trim() ||
     "Explore this data and surface the most interesting, decision-relevant insights.";
   return [
     `You have ${datasets.length} dataframe(s) loaded:`,
     "",
-    sections.join("\n\n"),
+    datasets.map(renderDataset).join("\n\n"),
     "",
     `User question: ${q}`,
     "",
-    "Begin with a brief analysis plan, then take your first step.",
+    kickoffClosing(mode),
   ].join("\n");
 }
 
@@ -134,6 +209,8 @@ async function callTurn(
   apiKey: string,
   messages: ChatMessage[],
   emit: (e: AgentEvent) => void,
+  system: string,
+  effort: "low" | "medium" | "high",
 ): Promise<FinalMessage> {
   let planId: string | null = null;
   let final: FinalMessage | null = null;
@@ -156,9 +233,9 @@ async function callTurn(
   };
 
   if (provider === "anthropic") {
-    await runAnthropicTurn(write, { messages }, apiKey);
+    await runAnthropicTurn(write, { messages }, apiKey, system, effort);
   } else {
-    await runOpenRouterTurn(write, { messages }, apiKey);
+    await runOpenRouterTurn(write, { messages }, apiKey, system, effort);
   }
 
   if (planId) emit({ type: "plan_end", id: planId });
@@ -188,6 +265,18 @@ async function withRetry<T>(fn: () => Promise<T>, signal: AbortSignal): Promise<
   throw lastErr;
 }
 
+function toDatasetContext(d: RunnerDataset): DatasetContext {
+  return {
+    alias: d.alias,
+    name: d.name,
+    rowCount: d.rowCount,
+    sampled: d.sampled,
+    columns: d.profile?.columns ?? [],
+    domain: d.profile?.domain,
+    sampleRows: d.sampleRows,
+  };
+}
+
 export async function runAgentTurn(input: RunnerInput): Promise<RunnerOutput> {
   const { conversationId, question, datasets, history, isFollowUp, signal } = input;
 
@@ -205,24 +294,43 @@ export async function runAgentTurn(input: RunnerInput): Promise<RunnerOutput> {
     storageKey: d.storageKey,
   }));
 
-  const kickoff: ChatMessage = { role: "user", content: buildKickoff(datasets, question, isFollowUp) };
-  const messages: ChatMessage[] = [...history, kickoff];
-  const appended: ChatMessage[] = [kickoff];
+  // Context Pack (persona × org × data profile) and the user's effort dial.
+  const pack = buildContextPack({
+    persona: input.persona,
+    org: { domain: input.org.domain, vertical: input.org.vertical },
+    datasets: datasets.map(toDatasetContext),
+  });
+  const effort = effortLevel(input.effort);
+
+  const messages: ChatMessage[] = [...history];
+  const appended: ChatMessage[] = [];
 
   let inputTokens = 0;
   let outputTokens = 0;
   let lastExecutionWasError = false;
+  let runIntent: AnalysisMode = "analytical";
+  let followUps: string[] = [];
 
   const push = (m: ChatMessage) => {
     messages.push(m);
     appended.push(m);
   };
 
+  /** After a run settles, ask for next-step questions and emit them (fail-soft). */
+  async function settleFollowUps(report: FinalReport | null, answerText: string): Promise<string[]> {
+    const answer = report ? JSON.stringify(report) : answerText;
+    if (!answer.trim()) return [];
+    const fu = await generateFollowUps(question, answer, pack).catch(() => []);
+    if (fu.length) emit({ type: "suggestions", id: uid("sugg"), questions: fu });
+    return fu;
+  }
+
   try {
     emit({ type: "status", status: "running" });
 
-    // Scope gate: refuse out-of-scope questions before any kernel or loop work.
-    const verdict = await classifyScope(
+    // Scope + intent gate: refuse off-topic questions and route the rest to a
+    // mode (quick_fact / analytical / decision) before any kernel or loop work.
+    const verdict = await classifyIntent(
       question,
       datasets.map((d) => ({
         alias: d.alias,
@@ -232,6 +340,16 @@ export async function runAgentTurn(input: RunnerInput): Promise<RunnerOutput> {
       provider,
       apiKey,
     );
+    runIntent = verdict.intent;
+    const mode = verdict.intent;
+    const system = buildSystemPrompt(pack, mode, effort);
+
+    const kickoff: ChatMessage = {
+      role: "user",
+      content: buildKickoff(datasets, question, isFollowUp, mode),
+    };
+    push(kickoff);
+
     if (!verdict.inScope) {
       const refusal =
         verdict.refusal ??
@@ -249,7 +367,10 @@ export async function runAgentTurn(input: RunnerInput): Promise<RunnerOutput> {
       emit({ type: "step", current: turn + 1, max: MAX_ITERATIONS });
       if (lastExecutionWasError) emit({ type: "correction", id: uid("fix") });
 
-      const final = await withRetry(() => callTurn(provider, apiKey, messages, emit), signal);
+      const final = await withRetry(
+        () => callTurn(provider, apiKey, messages, emit, system, effort),
+        signal,
+      );
       if (signal.aborted) return finish("CANCELLED");
 
       inputTokens += final.usage?.input_tokens ?? 0;
@@ -270,9 +391,28 @@ export async function runAgentTurn(input: RunnerInput): Promise<RunnerOutput> {
           .map((b) => b.text)
           .join("");
 
-        // Secondary net: the model itself declined mid-loop with a short
-        // text-only reply → surface it as a notice, don't fabricate a report.
-        if (toolUses.length === 0 && turn === 0 && assistantText.trim().length < 600) {
+        // quick_fact / analytical don't require a final_report — a text answer
+        // is the legitimate conclusion. Only force a report for decision mode,
+        // when the model explicitly asked for one, or as a last-turn backstop.
+        const requireReport = wantsReport || mode === "decision" || isLastTurn;
+
+        if (!requireReport) {
+          if (assistantText.trim()) push({ role: "assistant", content: assistantText });
+          followUps = await settleFollowUps(null, assistantText);
+          emit({ type: "status", status: "done" });
+          return finish("DONE", null);
+        }
+
+        // Secondary net (decision mode only — the scope gate already ran, and
+        // for quick_fact/analytical a short no-tool reply is handled above):
+        // the model declined mid-loop with a short text-only reply → surface it
+        // as a notice, don't fabricate a report.
+        if (
+          mode === "decision" &&
+          toolUses.length === 0 &&
+          turn === 0 &&
+          assistantText.trim().length < 600
+        ) {
           emit({ type: "notice", id: uid("scope"), tone: "warning", text: assistantText.trim() });
           push({ role: "assistant", content: assistantText });
           emit({ type: "status", status: "done" });
@@ -288,14 +428,15 @@ export async function runAgentTurn(input: RunnerInput): Promise<RunnerOutput> {
         const report = await withRetry(
           () =>
             provider === "anthropic"
-              ? generateAnthropicReport(reportHistory, apiKey)
-              : generateOpenRouterReport(reportHistory, apiKey),
+              ? generateAnthropicReport(reportHistory, apiKey, system, effort)
+              : generateOpenRouterReport(reportHistory, apiKey, system, effort),
           signal,
         );
         if (signal.aborted) return finish("CANCELLED");
 
         if (assistantText.trim()) push({ role: "assistant", content: assistantText });
         emit({ type: "report", id: uid("report"), report });
+        followUps = await settleFollowUps(report, assistantText);
         emit({ type: "status", status: "done" });
         return finish("DONE", report);
       }
@@ -368,6 +509,16 @@ export async function runAgentTurn(input: RunnerInput): Promise<RunnerOutput> {
     report: FinalReport | null = null,
     error?: string,
   ): RunnerOutput {
-    return { events, apiMessages: appended, report, inputTokens, outputTokens, status, error };
+    return {
+      events,
+      apiMessages: appended,
+      report,
+      inputTokens,
+      outputTokens,
+      status,
+      error,
+      intent: runIntent,
+      suggestions: followUps.length ? followUps : undefined,
+    };
   }
 }

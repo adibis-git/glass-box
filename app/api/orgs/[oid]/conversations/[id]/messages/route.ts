@@ -7,7 +7,10 @@ import { authorize, authzErrorResponse } from "@/lib/authz";
 import { audit } from "@/lib/audit";
 import { runAgentTurn, type RunnerDataset } from "@/server/agent/runner";
 import type { ChatMessage, ContentBlock } from "@/lib/types";
-import type { Prisma } from "@/lib/generated/prisma/client";
+import type { ColumnProfile, DatasetDomain } from "@/lib/agent/context";
+import type { Prisma, AnalysisEffort } from "@/lib/generated/prisma/client";
+
+const EFFORTS = new Set<AnalysisEffort>(["LOW", "MEDIUM", "HIGH"]);
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,34 +53,55 @@ export async function POST(req: Request, { params }: Params) {
     return authzErrorResponse(err) ?? Response.json({ error: "Failed." }, { status: 500 });
   }
 
-  const body = (await req.json().catch(() => ({}))) as { question?: string };
+  const body = (await req.json().catch(() => ({}))) as { question?: string; effort?: string };
   const question = String(body.question ?? "").trim();
   if (!question) return Response.json({ error: "Ask a question." }, { status: 400 });
 
   const conversation = await prisma.conversation.findFirst({
     where: { id, orgId: oid },
     include: {
+      org: { select: { domain: true, vertical: true } },
       datasets: { include: { dataset: true } },
       messages: { orderBy: { createdAt: "asc" } },
     },
   });
   if (!conversation) return Response.json({ error: "Conversation not found." }, { status: 404 });
 
+  // Who's asking (persona) + effort dial. Persona is fetched directly rather
+  // than relying on the authz Ctx; effort comes from the request, else the
+  // conversation's saved default.
+  const membership = await prisma.membership.findUnique({
+    where: { userId_orgId: { userId: ctx.userId, orgId: oid } },
+    select: { persona: true },
+  });
+  const bodyEffort = typeof body.effort === "string" ? body.effort.toUpperCase() : "";
+  const effort: AnalysisEffort = EFFORTS.has(bodyEffort as AnalysisEffort)
+    ? (bodyEffort as AnalysisEffort)
+    : conversation.defaultEffort;
+
   const running = conversation.messages.some((m) => m.status === "RUNNING");
   if (running) {
     return Response.json({ error: "A run is already in progress for this conversation." }, { status: 409 });
   }
 
-  const datasets: RunnerDataset[] = conversation.datasets.map((l) => ({
-    datasetId: l.dataset.id,
-    alias: l.alias,
-    storageKey: l.dataset.storageKey,
-    name: l.dataset.name,
-    rowCount: l.dataset.rowCount,
-    sampled: l.dataset.sampled,
-    columnSchema: (l.dataset.columnSchema as { name: string; dtype: string }[]) ?? [],
-    sampleRows: (l.dataset.sampleRows as Record<string, unknown>[]) ?? [],
-  }));
+  const datasets: RunnerDataset[] = conversation.datasets.map((l) => {
+    const raw = l.dataset.profile as { columns?: ColumnProfile[]; domain?: DatasetDomain } | null;
+    const profile =
+      raw && Array.isArray(raw.columns)
+        ? { columns: raw.columns, domain: raw.domain }
+        : undefined;
+    return {
+      datasetId: l.dataset.id,
+      alias: l.alias,
+      storageKey: l.dataset.storageKey,
+      name: l.dataset.name,
+      rowCount: l.dataset.rowCount,
+      sampled: l.dataset.sampled,
+      columnSchema: (l.dataset.columnSchema as { name: string; dtype: string }[]) ?? [],
+      sampleRows: (l.dataset.sampleRows as Record<string, unknown>[]) ?? [],
+      profile,
+    };
+  });
   if (datasets.some((d) => !d.storageKey)) {
     return Response.json({ error: "A dataset in this conversation isn't ready." }, { status: 409 });
   }
@@ -139,6 +163,9 @@ export async function POST(req: Request, { params }: Params) {
         datasets,
         history,
         isFollowUp,
+        persona: membership?.persona ?? null,
+        org: { domain: conversation.org.domain, vertical: conversation.org.vertical },
+        effort,
         emit: (e) => send(e.type, e),
         // The run continues even if the client disconnects; it settles and
         // persists so the user can reload. Only explicit cancel aborts.
@@ -151,6 +178,9 @@ export async function POST(req: Request, { params }: Params) {
           events: result.events as unknown as Prisma.InputJsonValue,
           apiMessages: result.apiMessages as unknown as Prisma.InputJsonValue,
           report: (result.report ?? undefined) as unknown as Prisma.InputJsonValue,
+          suggestions: (result.suggestions ?? undefined) as unknown as Prisma.InputJsonValue,
+          intent: result.intent,
+          effort,
           inputTokens: result.inputTokens,
           outputTokens: result.outputTokens,
           status: result.status,

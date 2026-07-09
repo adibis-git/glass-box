@@ -10,8 +10,15 @@ import { FeedCard } from "@/components/FeedCard";
 import { ReportPanel, ReportComposing } from "@/components/ReportPanel";
 import { ChartRenderer } from "@/components/ChartRenderer";
 import { Button } from "@/components/ui/Button";
+import type { AnalysisEffort } from "@/lib/generated/prisma/enums";
 
 type Role = "OWNER" | "ADMIN" | "MEMBER" | "VIEWER";
+
+const EFFORT_OPTIONS: { value: AnalysisEffort; label: string }[] = [
+  { value: "LOW", label: "Low" },
+  { value: "MEDIUM", label: "Medium" },
+  { value: "HIGH", label: "High" },
+];
 
 interface MessageProp {
   id: string;
@@ -20,13 +27,33 @@ interface MessageProp {
   events: AgentEvent[] | null;
   status: string;
   error: string | null;
+  suggestions: string[] | null;
 }
 
 interface ConversationProp {
   id: string;
   title: string;
+  defaultEffort: AnalysisEffort;
+  starterQuestions: string[];
   datasets: { alias: string; name: string; sampled: boolean; rowCount: number | null }[];
   messages: MessageProp[];
+}
+
+function SuggestionChips({ items, onPick }: { items: string[]; onPick: (q: string) => void }) {
+  if (!items.length) return null;
+  return (
+    <div className="flex flex-wrap gap-2 pl-9">
+      {items.map((s) => (
+        <button
+          key={s}
+          onClick={() => onPick(s)}
+          className="rounded-lg border border-border bg-panel px-3 py-1.5 text-xs text-foreground/80 hover:border-accent/50 hover:text-foreground"
+        >
+          {s}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function replay(events: AgentEvent[]): FeedState {
@@ -86,6 +113,8 @@ function RunBlock({
   orgId,
   messageId,
   canShare,
+  suggestions,
+  onAsk,
 }: {
   question: string;
   events: AgentEvent[];
@@ -94,6 +123,8 @@ function RunBlock({
   orgId: string;
   messageId?: string | null;
   canShare: boolean;
+  suggestions?: string[] | null;
+  onAsk?: (q: string) => void;
 }) {
   const state = useMemo(() => replay(events), [events]);
   const steps = state.feed.filter((f) => f.kind === "code").length;
@@ -181,6 +212,11 @@ function RunBlock({
           </details>
         )}
       </div>
+
+      {/* Follow-up suggestion chips for this assistant turn */}
+      {!live && onAsk && suggestions && suggestions.length > 0 && (
+        <SuggestionChips items={suggestions} onPick={onAsk} />
+      )}
     </div>
   );
 }
@@ -189,10 +225,14 @@ export function ConversationWorkspace({
   orgId,
   myRole,
   conversation,
+  personaLabel,
+  domain,
 }: {
   orgId: string;
   myRole: Role;
   conversation: ConversationProp;
+  personaLabel?: string | null;
+  domain?: string | null;
 }) {
   const router = useRouter();
   const canAsk = myRole !== "VIEWER";
@@ -204,6 +244,7 @@ export function ConversationWorkspace({
       events: AgentEvent[];
       error: string | null;
       messageId: string | null;
+      suggestions: string[];
     }[] = [];
     const msgs = conversation.messages;
     for (let i = 0; i < msgs.length; i++) {
@@ -214,6 +255,7 @@ export function ConversationWorkspace({
         events: assistant?.events ?? [],
         error: assistant?.status === "ERROR" ? assistant.error ?? "The run failed." : null,
         messageId: assistant?.id ?? null,
+        suggestions: assistant?.suggestions ?? [],
       });
     }
     return runs;
@@ -224,6 +266,7 @@ export function ConversationWorkspace({
   const [liveError, setLiveError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [input, setInput] = useState("");
+  const [effort, setEffort] = useState<AnalysisEffort>(conversation.defaultEffort ?? "LOW");
   const endRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -263,15 +306,19 @@ export function ConversationWorkspace({
         },
       },
       ctrl.signal,
+      effort,
     );
   }
 
   const hasAnyRun = persistedRuns.length > 0 || liveQuestion !== null;
-  const suggested = [
-    "Explore this data and surface the most important insights",
-    "What changed over time, and where is it concentrated?",
-    "What should we act on first, based on this data?",
-  ];
+  // Prefer persona×data starter questions when present; else generic prompts.
+  const suggested = conversation.starterQuestions.length
+    ? conversation.starterQuestions
+    : [
+        "Explore this data and surface the most important insights",
+        "What changed over time, and where is it concentrated?",
+        "What should we act on first, based on this data?",
+      ];
 
   return (
     <div className="flex h-full flex-col">
@@ -297,6 +344,16 @@ export function ConversationWorkspace({
             <span className="gb-pulse shrink-0 text-xs text-accent">● analyzing</span>
           )}
         </div>
+        {(personaLabel || domain) && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
+            {personaLabel && (
+              <span className="rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-accent">
+                {personaLabel}
+              </span>
+            )}
+            {domain && <span className="truncate">Context: {domain}</span>}
+          </div>
+        )}
       </div>
 
       {/* Runs */}
@@ -336,6 +393,8 @@ export function ConversationWorkspace({
               orgId={orgId}
               messageId={run.messageId}
               canShare={canAsk}
+              suggestions={canAsk ? run.suggestions : null}
+              onAsk={canAsk ? ask : undefined}
             />
           ))}
 
@@ -374,6 +433,21 @@ export function ConversationWorkspace({
             disabled={!canAsk || running}
             className="h-10 flex-1 rounded-xl border border-border bg-panel-2 px-4 text-sm text-foreground placeholder:text-muted/60 outline-none focus:border-accent/60 disabled:opacity-50"
           />
+          <label className="flex items-center gap-1.5 text-[11px] text-muted" title="Analysis depth — deeper takes longer">
+            <span className="hidden sm:inline">Depth</span>
+            <select
+              value={effort}
+              onChange={(e) => setEffort(e.target.value as AnalysisEffort)}
+              disabled={!canAsk || running}
+              className="h-10 rounded-xl border border-border bg-panel-2 px-2 text-xs text-foreground outline-none focus:border-accent/60 disabled:opacity-50"
+            >
+              {EFFORT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <Button variant="primary" onClick={() => ask()} disabled={!canAsk || running || !input.trim()}>
             {running ? "Analyzing…" : "Ask"}
           </Button>

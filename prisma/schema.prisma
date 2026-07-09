@@ -38,6 +38,22 @@ enum RunStatus {
   CANCELLED
 }
 
+// The user's function in an org — drives persona-aware framing (v3 §3).
+enum Persona {
+  SALES
+  SUPPORT
+  FINANCE
+  OPERATIONS
+  CONSULTANT
+}
+
+// User-selectable analysis depth, mapped to Claude's effort (v3 §16.4).
+enum AnalysisEffort {
+  LOW
+  MEDIUM
+  HIGH
+}
+
 model User {
   id            String       @id @default(cuid())
   email         String       @unique
@@ -76,6 +92,8 @@ model Organization {
   name          String
   slug          String   @unique
   retentionDays Int? // null = keep until user deletes
+  domain        String? // "B2B SaaS sales", "IT procurement" — workspace framing (v3 §3)
+  vertical      String? // "Healthcare", "Fintech", … industry framing
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -92,6 +110,7 @@ model Membership {
   userId    String
   orgId     String
   role      Role     @default(MEMBER)
+  persona   Persona? // functional role for persona-aware framing (v3 §3)
   createdAt DateTime @default(now())
 
   user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -135,6 +154,7 @@ model Dataset {
   sampleRows         Json? // first 20 rows (what the LLM sees)
   sampled            Boolean       @default(false) // strided-sample flag
   normalizations     Json? // applied cleanups, shown in UI
+  profile            Json? // ColumnProfile[] + DatasetDomain — source intelligence (v3 §4)
   status             DatasetStatus @default(PROCESSING)
   errorMessage       String?
   deletedAt          DateTime? // soft delete
@@ -151,11 +171,13 @@ model Dataset {
 
 model Conversation {
   id          String   @id @default(cuid())
-  orgId       String
-  createdById String?
-  title       String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  orgId            String
+  createdById      String?
+  title            String
+  starterQuestions Json? // cached persona×data starter questions (v3 §5)
+  defaultEffort    AnalysisEffort @default(LOW) // analysis-depth dial (v3 §16.4)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   org      Organization          @relation(fields: [orgId], references: [id], onDelete: Cascade)
   datasets ConversationDataset[]
@@ -186,6 +208,9 @@ model Message {
   events         Json? // AgentEvent[] — feed replay (assistant runs)
   apiMessages    Json? // ChatMessage[] appended this turn — LLM context
   report         Json? // FinalReport, if produced
+  suggestions    Json? // follow-up question chips for this assistant turn (v3 §5)
+  effort         AnalysisEffort? // effort this run used (v3 §16.4)
+  intent         String? // classified intent: quick_fact|analytical|decision (v3 §6)
   inputTokens    Int         @default(0)
   outputTokens   Int         @default(0)
   status         RunStatus   @default(DONE)
