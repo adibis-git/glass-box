@@ -25,8 +25,9 @@ import type { ChartSpec } from "@/lib/types";
 const PALETTE = ["#e0885f", "#74a0ff", "#4ade80", "#f4b350", "#c084fc", "#22d3ee", "#f26d6d"];
 const HEIGHT = 300;
 
-const axisStyle = { stroke: "#6b7180", fontSize: 11 };
-const gridStyle = { stroke: "#20232e" };
+// Axis/grid are surface chrome (not data) — read from theme tokens.
+const axisStyle = { stroke: "var(--muted)", fontSize: 11 };
+const gridStyle = { stroke: "var(--border)" };
 
 /** Compact number formatting: 1.2k / 3.4M / 2.1B, else up to 2 decimals. */
 function fmt(v: unknown): string {
@@ -134,7 +135,7 @@ export function ChartRenderer({ spec }: { spec: ChartSpec }) {
         dataKey={x_key}
         {...axisStyle}
         tickLine={false}
-        axisLine={{ stroke: "#20232e" }}
+        axisLine={{ stroke: "var(--border)" }}
         tickMargin={8}
       />
       <YAxis
@@ -144,7 +145,7 @@ export function ChartRenderer({ spec }: { spec: ChartSpec }) {
         width={44}
         tickFormatter={(v) => fmt(v)}
       />
-      <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+      <Tooltip content={<CustomTooltip />} cursor={{ fill: "var(--muted)", fillOpacity: 0.08 }} />
       {y_keys.length > 1 && (
         <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} iconType="circle" iconSize={8} />
       )}
@@ -216,7 +217,7 @@ export function ChartRenderer({ spec }: { spec: ChartSpec }) {
             outerRadius={100}
             innerRadius={55}
             paddingAngle={2}
-            stroke="#0a0b10"
+            stroke="var(--background)"
             strokeWidth={2}
             {...anim}
           >
@@ -240,7 +241,7 @@ export function ChartRenderer({ spec }: { spec: ChartSpec }) {
                 dataKey={k}
                 position="top"
                 formatter={(value) => fmt(value)}
-                style={{ fill: "#8b90a0", fontSize: 10, fontWeight: 600 }}
+                style={{ fill: "var(--muted)", fontSize: 10, fontWeight: 600 }}
               />
             )}
           </Bar>

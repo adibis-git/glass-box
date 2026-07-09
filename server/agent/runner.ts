@@ -21,7 +21,7 @@ import {
   type DatasetDomain,
 } from "@/lib/agent/context";
 import { generateFollowUps } from "@/lib/agent/suggestions";
-import type { AgentEvent } from "@/lib/agent/events";
+import type { AgentEvent, Suggestion } from "@/lib/agent/events";
 import type { Persona, AnalysisEffort } from "@/lib/generated/prisma/client";
 import type {
   ChartSpec,
@@ -77,7 +77,7 @@ export interface RunnerOutput {
   /** Classified intent for this run (persisted to Message.intent). */
   intent?: AnalysisMode;
   /** Follow-up question chips (persisted to Message.suggestions). */
-  suggestions?: string[];
+  suggestions?: Suggestion[];
 }
 
 class AgentError extends Error {
@@ -313,7 +313,7 @@ export async function runAgentTurn(input: RunnerInput): Promise<RunnerOutput> {
   // verifier checks the final report against (decision runs only).
   const evidence: string[] = [];
   let runIntent: AnalysisMode = "analytical";
-  let followUps: string[] = [];
+  let followUps: Suggestion[] = [];
 
   const push = (m: ChatMessage) => {
     messages.push(m);
@@ -321,11 +321,11 @@ export async function runAgentTurn(input: RunnerInput): Promise<RunnerOutput> {
   };
 
   /** After a run settles, ask for next-step questions and emit them (fail-soft). */
-  async function settleFollowUps(report: FinalReport | null, answerText: string): Promise<string[]> {
+  async function settleFollowUps(report: FinalReport | null, answerText: string): Promise<Suggestion[]> {
     const answer = report ? JSON.stringify(report) : answerText;
     if (!answer.trim()) return [];
     const fu = await generateFollowUps(question, answer, pack).catch(() => []);
-    if (fu.length) emit({ type: "suggestions", id: uid("sugg"), questions: fu });
+    if (fu.length) emit({ type: "suggestions", id: uid("sugg"), items: fu });
     return fu;
   }
 

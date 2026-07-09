@@ -7,6 +7,9 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import type { ContextPack, DatasetContext } from "@/lib/agent/context";
+import type { Suggestion } from "@/lib/agent/events";
+
+export type { Suggestion };
 
 const MODEL_ANTHROPIC = "claude-sonnet-5";
 const MODEL_OPENROUTER = "anthropic/claude-sonnet-5";
@@ -61,8 +64,13 @@ async function callModel(prompt: string): Promise<string | null> {
   }
 }
 
-/** Pull a JSON string[] out of a model reply. Returns [] if none can be recovered. */
-function parseQuestionArray(text: string | null, max: number): string[] {
+/**
+ * Pull a JSON array of suggestions out of a model reply. Each element may be a
+ * `{ label, question }` object (new shape) or a bare string (legacy / model
+ * shortcut) — a string is treated as both the chip label and the full question.
+ * Returns [] if none can be recovered.
+ */
+function parseSuggestionArray(text: string | null, max: number): Suggestion[] {
   if (!text) return [];
   const first = text.indexOf("[");
   const last = text.lastIndexOf("]");
@@ -70,11 +78,19 @@ function parseQuestionArray(text: string | null, max: number): string[] {
   try {
     const arr = JSON.parse(text.slice(first, last + 1));
     if (!Array.isArray(arr)) return [];
-    return arr
-      .filter((q): q is string => typeof q === "string")
-      .map((q) => q.trim())
-      .filter(Boolean)
-      .slice(0, max);
+    const out: Suggestion[] = [];
+    for (const item of arr) {
+      if (typeof item === "string") {
+        const q = item.trim();
+        if (q) out.push({ label: q, question: q });
+      } else if (item && typeof item === "object") {
+        const question = String((item as { question?: unknown }).question ?? "").trim();
+        const label = String((item as { label?: unknown }).label ?? "").trim() || question;
+        if (question) out.push({ label, question });
+      }
+      if (out.length >= max) break;
+    }
+    return out;
   } catch {
     return [];
   }
@@ -105,16 +121,20 @@ function describeDataset(d: DatasetContext): string {
 }
 
 /** 4-6 persona×data starter questions for a new conversation. Fails soft to []. */
-export async function generateStarterQuestions(pack: ContextPack): Promise<string[]> {
+export async function generateStarterQuestions(pack: ContextPack): Promise<Suggestion[]> {
   if (!pack.datasets.length) return [];
   const prompt = `You seed a data-analysis workspace with starter questions the user can click to begin.
 
 ${describePack(pack)}
 
-Write 4-6 sharp, specific starter questions this audience would actually want answered from THIS data. Each must be answerable from the loaded columns, be phrased naturally (as the user would type it), and prefer decision-relevant angles (trends, segments, rates, risks, opportunities) over trivial lookups. Do not invent columns that aren't listed.
+Write 4-6 sharp, specific starter questions this audience would actually want answered from THIS data. Each must be answerable from the loaded columns and prefer decision-relevant angles (trends, segments, rates, risks, opportunities) over trivial lookups. Do not invent columns that aren't listed.
 
-Respond with ONLY a JSON array of strings, e.g. ["...", "...", "..."]. No other text.`;
-  return parseQuestionArray(await callModel(prompt), 6);
+For each, return an object with:
+- "label": a terse 3-6 word chip that scans at a glance (e.g. "Revenue by segment", "Top churn drivers")
+- "question": the full, specific, naturally-phrased question that gets submitted (as the user would type it)
+
+Respond with ONLY a JSON array of {"label","question"} objects, e.g. [{"label":"...","question":"..."}]. No other text.`;
+  return parseSuggestionArray(await callModel(prompt), 6);
 }
 
 /** 3 next-step questions after a run. `answerOrReportJson` is the report JSON or answer text. */
@@ -122,7 +142,7 @@ export async function generateFollowUps(
   question: string,
   answerOrReportJson: string,
   pack: ContextPack,
-): Promise<string[]> {
+): Promise<Suggestion[]> {
   if (!pack.datasets.length) return [];
   const prompt = `You suggest next-step questions in a data-analysis workspace.
 
@@ -135,8 +155,12 @@ ${answerOrReportJson.slice(0, 3000)}
 
 Write exactly 3 natural follow-up questions that dig deeper or open a useful adjacent angle, each answerable from the loaded data. Don't repeat the original question. Prefer decision-relevant directions.
 
-Respond with ONLY a JSON array of exactly 3 strings. No other text.`;
-  return parseQuestionArray(await callModel(prompt), 3);
+For each, return an object with:
+- "label": a terse 3-6 word chip that scans at a glance
+- "question": the full, specific, naturally-phrased follow-up question that gets submitted
+
+Respond with ONLY a JSON array of exactly 3 {"label","question"} objects. No other text.`;
+  return parseSuggestionArray(await callModel(prompt), 3);
 }
 
 // ── Document pillar (v3 §5/§14) ───────────────────────────────────────────────
@@ -166,7 +190,7 @@ function describeDocs(pack: ContextPack, docs: DocDescriptor[]): string {
 export async function generateDocumentStarters(
   pack: ContextPack,
   docs: DocDescriptor[],
-): Promise<string[]> {
+): Promise<Suggestion[]> {
   if (!docs.length) return [];
   const prompt = `You seed a document-analysis workspace with starter questions the user can click to begin.
 
@@ -174,8 +198,12 @@ ${describeDocs(pack, docs)}
 
 Write 4-6 sharp, specific starter questions this audience would actually want answered from THESE document(s). Favor high-value angles for the doc type — e.g. for an RFP/requirements doc: "Extract every mandatory requirement", "Where does this put risk on the vendor?"; for a contract/policy: key obligations, liabilities, unusual terms, deadlines. Each must be answerable from the document text.
 
-Respond with ONLY a JSON array of strings. No other text.`;
-  return parseQuestionArray(await callModel(prompt), 6);
+For each, return an object with:
+- "label": a terse 3-6 word chip that scans at a glance (e.g. "Mandatory requirements", "Vendor-side risk")
+- "question": the full, specific question that gets submitted
+
+Respond with ONLY a JSON array of {"label","question"} objects. No other text.`;
+  return parseSuggestionArray(await callModel(prompt), 6);
 }
 
 /** 3 next-step questions after a document run. */
@@ -184,7 +212,7 @@ export async function generateDocumentFollowUps(
   answerOrReportJson: string,
   pack: ContextPack,
   docs: DocDescriptor[],
-): Promise<string[]> {
+): Promise<Suggestion[]> {
   if (!docs.length) return [];
   const prompt = `You suggest next-step questions in a document-analysis workspace.
 
@@ -197,6 +225,10 @@ ${answerOrReportJson.slice(0, 3000)}
 
 Write exactly 3 natural follow-up questions that dig deeper or open a useful adjacent angle, each answerable from the document(s). Don't repeat the original question.
 
-Respond with ONLY a JSON array of exactly 3 strings. No other text.`;
-  return parseQuestionArray(await callModel(prompt), 3);
+For each, return an object with:
+- "label": a terse 3-6 word chip that scans at a glance
+- "question": the full, specific follow-up question that gets submitted
+
+Respond with ONLY a JSON array of exactly 3 {"label","question"} objects. No other text.`;
+  return parseSuggestionArray(await callModel(prompt), 3);
 }

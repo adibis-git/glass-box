@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { SessionProvider, useSession, signOut } from "next-auth/react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import type { OrgSummary } from "@/lib/activeOrg";
 import {
   Database,
@@ -251,13 +252,16 @@ function Shell({
               <div className="truncate text-sm text-foreground">{userName ?? userEmail}</div>
               <div className="truncate text-xs text-muted">{userEmail}</div>
             </div>
-            <button
-              onClick={() => signOut({ callbackUrl: "/" })}
-              className="rounded-md p-1.5 text-muted hover:bg-panel-2 hover:text-foreground"
-              title="Sign out"
-            >
-              <LogOut size={15} />
-            </button>
+            <div className="flex shrink-0 items-center gap-0.5">
+              <ThemeToggle className="h-7 w-7" />
+              <button
+                onClick={() => signOut({ callbackUrl: "/" })}
+                className="rounded-md p-1.5 text-muted hover:bg-panel-2 hover:text-foreground"
+                title="Sign out"
+              >
+                <LogOut size={15} />
+              </button>
+            </div>
           </div>
         </div>
       </aside>

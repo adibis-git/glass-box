@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import type { Prisma } from "@/lib/generated/prisma/client";
 import { authorize, authzErrorResponse } from "@/lib/authz";
 import { audit } from "@/lib/audit";
 import {
@@ -167,7 +168,7 @@ export async function POST(req: Request, { params }: Params) {
       if (starterQuestions.length) {
         await prisma.conversation.update({
           where: { id: conversation.id },
-          data: { starterQuestions },
+          data: { starterQuestions: starterQuestions as unknown as Prisma.InputJsonValue },
         });
       }
     } catch (e) {

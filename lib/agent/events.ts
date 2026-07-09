@@ -3,6 +3,16 @@
 
 import type { ChartSpec, FinalReport } from "@/lib/types";
 
+/**
+ * A clickable suggestion chip: `label` is a terse 3–6 word chip shown in the UI,
+ * `question` is the full question submitted when the chip is clicked. Persisted
+ * data may still be a bare string (legacy) — consumers must accept both.
+ */
+export interface Suggestion {
+  label: string;
+  question: string;
+}
+
 export type AgentEvent =
   | { type: "plan_start"; id: string }
   | { type: "plan_delta"; id: string; delta: string }
@@ -69,7 +79,7 @@ export type AgentEvent =
       /** Suggested next-step questions, emitted after the run settles (v3 §5). */
       type: "suggestions";
       id: string;
-      questions: string[];
+      items: Suggestion[];
     }
   | { type: "step"; current: number; max: number }
   | { type: "usage"; inputTokens: number; outputTokens: number }

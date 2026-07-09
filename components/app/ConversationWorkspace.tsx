@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { feedReducer, initialFeedState, type FeedState } from "@/lib/feed";
 import { fmtInt } from "@/lib/utils";
 import { streamQuestion } from "@/lib/agent/streamClient";
-import type { AgentEvent } from "@/lib/agent/events";
+import type { AgentEvent, Suggestion } from "@/lib/agent/events";
 import { FeedCard } from "@/components/FeedCard";
 import { ReportPanel, ReportComposing } from "@/components/ReportPanel";
 import { ChartRenderer } from "@/components/ChartRenderer";
@@ -35,6 +35,18 @@ const EFFORT_OPTIONS: { value: AnalysisEffort; label: string }[] = [
   { value: "HIGH", label: "High" },
 ];
 
+/**
+ * A suggestion as it may arrive from the server / persisted JSON: either the new
+ * `{ label, question }` object or a bare legacy string.
+ */
+type RawSuggestion = string | Suggestion;
+
+/** Coerce a suggestion to `{ label, question }`, treating a string as both. */
+function normalizeSuggestion(x: RawSuggestion): Suggestion {
+  if (typeof x === "string") return { label: x, question: x };
+  return { label: x.label || x.question, question: x.question };
+}
+
 interface MessageProp {
   id: string;
   role: "USER" | "ASSISTANT";
@@ -42,19 +54,19 @@ interface MessageProp {
   events: AgentEvent[] | null;
   status: string;
   error: string | null;
-  suggestions: string[] | null;
+  suggestions: RawSuggestion[] | null;
 }
 
 interface ConversationProp {
   id: string;
   title: string;
   defaultEffort: AnalysisEffort;
-  starterQuestions: string[];
+  starterQuestions: RawSuggestion[];
   datasets: { alias: string; name: string; sampled: boolean; rowCount: number | null; version?: number }[];
   messages: MessageProp[];
 }
 
-function SuggestionChips({ items, onPick }: { items: string[]; onPick: (q: string) => void }) {
+function SuggestionChips({ items, onPick }: { items: RawSuggestion[]; onPick: (q: string) => void }) {
   if (!items.length) return null;
   return (
     <div className="space-y-1.5 pl-9">
@@ -63,15 +75,19 @@ function SuggestionChips({ items, onPick }: { items: string[]; onPick: (q: strin
         Suggested
       </div>
       <div className="flex flex-wrap gap-2">
-        {items.map((s) => (
-          <button
-            key={s}
-            onClick={() => onPick(s)}
-            className="rounded-full border border-border bg-panel/60 px-3 py-1.5 text-xs text-foreground/80 transition hover:border-accent/50 hover:text-foreground"
-          >
-            {s}
-          </button>
-        ))}
+        {items.map((raw, i) => {
+          const s = normalizeSuggestion(raw);
+          return (
+            <button
+              key={`${s.label}-${i}`}
+              onClick={() => onPick(s.question)}
+              title={s.question}
+              className="rounded-full border border-border bg-panel/60 px-3 py-1.5 text-xs text-foreground/80 transition hover:border-accent/50 hover:text-foreground"
+            >
+              {s.label}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -155,7 +171,7 @@ function RunBlock({
   orgId: string;
   messageId?: string | null;
   canShare: boolean;
-  suggestions?: string[] | null;
+  suggestions?: RawSuggestion[] | null;
   onAsk?: (q: string) => void;
 }) {
   const state = useMemo(() => replay(events), [events]);
@@ -367,7 +383,7 @@ export function ConversationWorkspace({
       events: AgentEvent[];
       error: string | null;
       messageId: string | null;
-      suggestions: string[];
+      suggestions: RawSuggestion[];
     }[] = [];
     const msgs = conversation.messages;
     for (let i = 0; i < msgs.length; i++) {
@@ -435,7 +451,7 @@ export function ConversationWorkspace({
 
   const hasAnyRun = persistedRuns.length > 0 || liveQuestion !== null;
   // Prefer persona×data starter questions when present; else generic prompts.
-  const suggested = conversation.starterQuestions.length
+  const suggested: RawSuggestion[] = conversation.starterQuestions.length
     ? conversation.starterQuestions
     : [
         "Explore this data and surface the most important insights",
@@ -559,15 +575,19 @@ export function ConversationWorkspace({
               </p>
               {canAsk && (
                 <div className="mt-4 flex flex-col items-center gap-2">
-                  {suggested.map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => ask(s)}
-                      className="rounded-lg border border-border bg-panel px-3 py-1.5 text-xs text-foreground/80 hover:border-accent/50 hover:text-foreground"
-                    >
-                      {s}
-                    </button>
-                  ))}
+                  {suggested.map((raw, i) => {
+                    const s = normalizeSuggestion(raw);
+                    return (
+                      <button
+                        key={`${s.label}-${i}`}
+                        onClick={() => ask(s.question)}
+                        title={s.question}
+                        className="rounded-lg border border-border bg-panel px-3 py-1.5 text-xs text-foreground/80 hover:border-accent/50 hover:text-foreground"
+                      >
+                        {s.label}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>

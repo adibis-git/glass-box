@@ -1,11 +1,16 @@
 @import "tailwindcss";
 
 /*
-  Glass Box — dark by default.
+  Glass Box — class-based theming (next-themes, attribute="class").
   Cool slate surfaces with a warm coral brand accent (a nod to Anthropic),
   amber for the self-correction moment, red for errors, green for insights.
+
+  Token sets:
+    :root / .dark  → dark palette (default fallback)
+    .light         → light palette (off-white surfaces, dark text)
 */
-:root {
+:root,
+.dark {
   --background: #0a0b10;
   --panel: #12141c;
   --panel-2: #171a24;
@@ -18,6 +23,21 @@
   --red: #f26d6d;
   --green: #4ade80;
   --blue: #74a0ff;
+}
+
+.light {
+  --background: #f7f8fa;
+  --panel: #ffffff;
+  --panel-2: #f1f3f7;
+  --border: #dde1e9;
+  --foreground: #1a1d24;
+  --muted: #5c6270;
+  --accent: #c6602f;
+  --accent-foreground: #fff5ee;
+  --amber: #b9791a;
+  --red: #d4443f;
+  --green: #1f9d54;
+  --blue: #3b6fd6;
 }
 
 @theme inline {

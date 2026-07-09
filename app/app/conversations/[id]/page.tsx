@@ -7,8 +7,25 @@ import { isDocProfile, type DocProfile } from "@/lib/agent/context";
 import type { AgentEvent } from "@/lib/agent/events";
 import type { AnalysisEffort, Persona } from "@/lib/generated/prisma/enums";
 
-function asStringArray(v: unknown): string[] {
-  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+type RawSuggestion = string | { label: string; question: string };
+
+/**
+ * Coerce persisted suggestion JSON to the UI shape. Accepts legacy `string[]`
+ * (kept as-is) and the new `{ label, question }[]`; anything else is dropped.
+ */
+function asSuggestionArray(v: unknown): RawSuggestion[] {
+  if (!Array.isArray(v)) return [];
+  const out: RawSuggestion[] = [];
+  for (const x of v) {
+    if (typeof x === "string") {
+      out.push(x);
+    } else if (x && typeof x === "object") {
+      const question = String((x as { question?: unknown }).question ?? "").trim();
+      const label = String((x as { label?: unknown }).label ?? "").trim() || question;
+      if (question) out.push({ label, question });
+    }
+  }
+  return out;
 }
 
 export default async function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
@@ -94,7 +111,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
         id: c.id,
         title: c.title,
         defaultEffort: c.defaultEffort as AnalysisEffort,
-        starterQuestions: asStringArray(c.starterQuestions),
+        starterQuestions: asSuggestionArray(c.starterQuestions),
         datasets: c.sources.map((l) => ({
           alias: l.alias,
           name: l.source.name,
@@ -109,7 +126,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
           events: (m.events as AgentEvent[] | null) ?? null,
           status: m.status,
           error: m.error,
-          suggestions: asStringArray(m.suggestions),
+          suggestions: asSuggestionArray(m.suggestions),
         })),
       }}
     />

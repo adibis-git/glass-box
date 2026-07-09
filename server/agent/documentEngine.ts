@@ -19,7 +19,7 @@ import { DOCUMENT_TOOLS } from "@/lib/agent/documentTools";
 import { retrievePassages, type RetrievableDoc } from "@/lib/agent/documentRetrieval";
 import { generateDocumentFollowUps, type DocDescriptor } from "@/lib/agent/suggestions";
 import { buildContextPack, effortLevel, type AnalysisMode, type DocProfile } from "@/lib/agent/context";
-import type { AgentEvent } from "@/lib/agent/events";
+import type { AgentEvent, Suggestion } from "@/lib/agent/events";
 import type { RunnerOutput } from "@/server/agent/runner";
 import type { Persona, AnalysisEffort } from "@/lib/generated/prisma/client";
 import type { ChatMessage, ContentBlock, FinalReport, ToolResultBlock, ToolUseBlock } from "@/lib/types";
@@ -257,13 +257,13 @@ export async function runDocumentTurn(input: DocumentRunnerInput): Promise<Runne
   // the final report against (document_review runs only).
   const citedQuotes: string[] = [];
   let runIntent: AnalysisMode = "document_review";
-  let followUps: string[] = [];
+  let followUps: Suggestion[] = [];
 
-  async function settleFollowUps(report: FinalReport | null, answerText: string): Promise<string[]> {
+  async function settleFollowUps(report: FinalReport | null, answerText: string): Promise<Suggestion[]> {
     const answer = report ? JSON.stringify(report) : answerText;
     if (!answer.trim()) return [];
     const fu = await generateDocumentFollowUps(question, answer, pack, descriptors).catch(() => []);
-    if (fu.length) emit({ type: "suggestions", id: uid("sugg"), questions: fu });
+    if (fu.length) emit({ type: "suggestions", id: uid("sugg"), items: fu });
     return fu;
   }
 

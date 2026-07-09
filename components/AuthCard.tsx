@@ -3,6 +3,7 @@
 import Link from "next/link";
 import * as React from "react";
 import { ScanSearch } from "lucide-react";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export function AuthShell({
   title,
@@ -16,7 +17,10 @@ export function AuthShell({
   footer: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
+    <div className="relative flex min-h-screen items-center justify-center px-4">
+      <div className="absolute right-4 top-4">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-sm">
         <Link href="/" className="mb-8 flex items-center justify-center gap-2">
           <span className="grid h-8 w-8 place-items-center rounded-lg border border-accent/40 bg-accent/15 text-accent">
