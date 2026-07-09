@@ -62,7 +62,7 @@ export class KernelHandle {
   private readyPromise: Promise<void>;
   private dead = false;
   private queue: Promise<unknown> = Promise.resolve();
-  /** dataset alias → datasetId currently loaded (registry uses this for eviction). */
+  /** dataframe alias → SourceVersion id currently loaded (registry uses this for eviction/reload). */
   loaded = new Map<string, string>();
   lastUsedAt = Date.now();
 
@@ -111,7 +111,7 @@ export class KernelHandle {
     return next;
   }
 
-  loadDataframe(alias: string, csv: string, datasetId: string): Promise<void> {
+  loadDataframe(alias: string, csv: string, versionId: string): Promise<void> {
     return this.enqueue(async () => {
       if (this.dead) throw new KernelDeadError("Kernel is dead.");
       await this.readyPromise;
@@ -128,7 +128,7 @@ export class KernelHandle {
         this.worker.on("message", onMsg);
         this.worker.postMessage({ type: "load_df", alias, csv });
       });
-      this.loaded.set(alias, datasetId);
+      this.loaded.set(alias, versionId);
       this.lastUsedAt = Date.now();
     });
   }

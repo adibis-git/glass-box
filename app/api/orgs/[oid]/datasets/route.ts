@@ -1,12 +1,12 @@
+// Datasets API — external path kept for frontend churn reasons, but each
+// "dataset" is now a Source (kind=TABULAR) with a latest SourceVersion (v3 §2).
+// The `id` in these responses is the Source id; conversations pin its versions.
+
 import { prisma } from "@/lib/db";
 import { authorize, authzErrorResponse } from "@/lib/authz";
 import { audit } from "@/lib/audit";
-import { getStorage } from "@/server/storage";
-import { ingestBuffer, IngestError, CSV_MAX } from "@/server/ingest";
-import { computeColumnProfiles } from "@/server/ingest/profile";
-import { describeDataset } from "@/lib/agent/datasetIntelligence";
-import type { DatasetProfile } from "@/lib/agent/context";
-import type { Prisma } from "@/lib/generated/prisma/client";
+import { IngestError, CSV_MAX } from "@/server/ingest";
+import { buildVersionData, purgeAtFor } from "@/server/ingest/version";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -17,23 +17,45 @@ export async function GET(_req: Request, { params }: Params) {
   const { oid } = await params;
   try {
     await authorize(oid, "VIEWER");
-    const datasets = await prisma.dataset.findMany({
-      where: { orgId: oid, deletedAt: null },
+    // A "dataset" row = a Source with at least one live version; show the latest.
+    const sources = await prisma.source.findMany({
+      where: { orgId: oid, versions: { some: { deletedAt: null } } },
       orderBy: { createdAt: "desc" },
-      select: {
-        id: true, name: true, originalFilename: true, sizeBytes: true, rowCount: true,
-        status: true, sampled: true, sheetName: true, createdAt: true,
+      include: {
+        versions: {
+          where: { deletedAt: null },
+          orderBy: { version: "desc" },
+          select: {
+            id: true, version: true, originalFilename: true, sizeBytes: true,
+            rowCount: true, status: true, sampled: true, sheetName: true, createdAt: true,
+          },
+        },
       },
     });
     return Response.json({
-      datasets: datasets.map((d) => ({ ...d, sizeBytes: d.sizeBytes.toString() })),
+      datasets: sources.map((s) => {
+        const v = s.versions[0];
+        return {
+          id: s.id,
+          name: s.name,
+          version: v.version,
+          versionCount: s.versions.length,
+          originalFilename: v.originalFilename,
+          sizeBytes: v.sizeBytes.toString(),
+          rowCount: v.rowCount,
+          status: v.status,
+          sampled: v.sampled,
+          sheetName: v.sheetName,
+          createdAt: s.createdAt,
+        };
+      }),
     });
   } catch (err) {
     return authzErrorResponse(err) ?? Response.json({ error: "Failed." }, { status: 500 });
   }
 }
 
-/** Upload a CSV/Excel file (multipart form field "file"). */
+/** Upload a CSV/Excel file (multipart form field "file") → Source + version 1. */
 export async function POST(req: Request, { params }: Params) {
   const { oid } = await params;
   try {
@@ -51,110 +73,61 @@ export async function POST(req: Request, { params }: Params) {
     const buf = Buffer.from(await file.arrayBuffer());
     const name = file.name.replace(/\.(csv|tsv|txt|xlsx|xls)$/i, "");
 
-    let result;
+    let versionData;
     try {
-      result = ingestBuffer(buf, file.name);
+      versionData = await buildVersionData(
+        oid,
+        {
+          buf,
+          filename: file.name,
+          mimeType: file.type,
+          sizeBytes: file.size,
+          uploadedById: ctx.userId,
+          sourceName: name,
+        },
+        { purgeAt: await purgeAtFor(oid) },
+      );
     } catch (e) {
-      if (e instanceof IngestError) {
-        return Response.json({ error: e.message }, { status: e.status });
-      }
+      if (e instanceof IngestError) return Response.json({ error: e.message }, { status: e.status });
       throw e;
     }
 
-    const storage = getStorage();
-    const id = crypto.randomUUID();
-    const originalKey = `org/${oid}/datasets/${id}/original${file.name.slice(file.name.lastIndexOf("."))}`;
-    await storage.put(originalKey, buf);
-
-    if (result.needsSheetPick) {
-      const dataset = await prisma.dataset.create({
-        data: {
-          orgId: oid,
-          uploadedById: ctx.userId,
-          name,
-          originalFilename: file.name,
-          mimeType: file.type || "application/octet-stream",
-          sizeBytes: BigInt(file.size),
-          storageKey: "", // set after sheet pick
-          originalStorageKey: originalKey,
-          availableSheets: result.needsSheetPick,
-          status: "NEEDS_SHEET_PICK",
-        },
-      });
-      await audit({
-        orgId: oid, actorId: ctx.userId, action: "dataset.upload",
-        targetType: "dataset", targetId: dataset.id,
-        metadata: { filename: file.name, sizeBytes: file.size, sheets: result.needsSheetPick }, req,
-      });
-      return Response.json(
-        { dataset: { id: dataset.id, status: dataset.status, availableSheets: result.needsSheetPick } },
-        { status: 201 },
-      );
-    }
-
-    const normalizedKey = `org/${oid}/datasets/${id}/normalized.csv`;
-    await storage.put(normalizedKey, result.normalizedCsv!);
-
-    // Source intelligence (v3 §4): profile columns + a cached Claude domain read.
-    // Fail-soft — a profiling error must never block the upload; profile is omitted.
-    let profile: Prisma.InputJsonValue | undefined;
-    try {
-      const columns = computeColumnProfiles(
-        result.sampleRows ?? [],
-        result.columnSchema ?? [],
-      );
-      const domain = await describeDataset(name, columns, result.sampleRows ?? []);
-      const built: DatasetProfile = { columns, ...(domain ? { domain } : {}) };
-      profile = built as unknown as Prisma.InputJsonValue;
-    } catch {
-      profile = undefined;
-    }
-
-    const dataset = await prisma.dataset.create({
+    const source = await prisma.source.create({
       data: {
         orgId: oid,
-        uploadedById: ctx.userId,
+        kind: "TABULAR",
         name,
-        originalFilename: file.name,
-        mimeType: file.type || "application/octet-stream",
-        sizeBytes: BigInt(file.size),
-        storageKey: normalizedKey,
-        originalStorageKey: originalKey,
-        rowCount: result.rowCount,
-        columnSchema: result.columnSchema as unknown as Prisma.InputJsonValue,
-        sampleRows: result.sampleRows as unknown as Prisma.InputJsonValue,
-        sampled: result.sampled ?? false,
-        normalizations: result.normalizations as unknown as Prisma.InputJsonValue,
-        ...(profile ? { profile } : {}),
-        status: "READY",
-        purgeAt: await purgeAtFor(oid),
+        versions: { create: { version: 1, ...versionData } },
       },
+      include: { versions: true },
     });
+    const v1 = source.versions[0];
 
     await audit({
       orgId: oid, actorId: ctx.userId, action: "dataset.upload",
-      targetType: "dataset", targetId: dataset.id,
+      targetType: "source", targetId: source.id,
       metadata: {
-        filename: file.name, sizeBytes: file.size, rows: result.rowCount,
-        sampled: result.sampled, normalizations: result.normalizations?.length ?? 0,
+        versionId: v1.id, version: 1, filename: file.name, sizeBytes: file.size,
+        rows: v1.rowCount, sampled: v1.sampled,
+        ...(v1.status === "NEEDS_SHEET_PICK"
+          ? { sheets: v1.availableSheets }
+          : { normalizations: (v1.normalizations as unknown[] | null)?.length ?? 0 }),
       },
       req,
     });
 
     return Response.json(
-      { dataset: { id: dataset.id, status: dataset.status, rowCount: dataset.rowCount } },
+      {
+        dataset: {
+          id: source.id,
+          status: v1.status,
+          rowCount: v1.rowCount,
+          ...(v1.status === "NEEDS_SHEET_PICK" ? { availableSheets: v1.availableSheets } : {}),
+        },
+      },
       { status: 201 },
     );
   } catch (err) {
     return authzErrorResponse(err) ?? Response.json({ error: "Upload failed." }, { status: 500 });
   }
-}
-
-async function purgeAtFor(orgId: string): Promise<Date | null> {
-  const org = await prisma.organization.findUnique({
-    where: { id: orgId },
-    select: { retentionDays: true },
-  });
-  if (!org?.retentionDays) return null;
-  return new Date(Date.now() + org.retentionDays * 86_400_000);
 }

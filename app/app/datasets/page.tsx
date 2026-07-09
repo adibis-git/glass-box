@@ -26,13 +26,28 @@ export default async function DatasetsPage() {
   const org = ctx.active;
   const canUpload = org.role !== "VIEWER";
 
-  const datasets = await prisma.dataset.findMany({
-    where: { orgId: org.id, deletedAt: null },
+  const sources = await prisma.source.findMany({
+    where: { orgId: org.id, versions: { some: { deletedAt: null } } },
     orderBy: { createdAt: "desc" },
-    select: {
-      id: true, name: true, originalFilename: true, sizeBytes: true,
-      rowCount: true, status: true, sampled: true, createdAt: true, sheetName: true,
+    include: {
+      versions: {
+        where: { deletedAt: null },
+        orderBy: { version: "desc" },
+        select: {
+          id: true, version: true, originalFilename: true, sizeBytes: true,
+          rowCount: true, status: true, sampled: true, sheetName: true,
+        },
+      },
     },
+  });
+  // Flatten each Source to its latest live version for the table view.
+  const datasets = sources.map((s) => {
+    const v = s.versions[0];
+    return {
+      id: s.id, name: s.name, createdAt: s.createdAt, versionCount: s.versions.length,
+      version: v.version, originalFilename: v.originalFilename, sizeBytes: v.sizeBytes,
+      rowCount: v.rowCount, status: v.status, sampled: v.sampled, sheetName: v.sheetName,
+    };
   });
 
   return (
@@ -81,6 +96,7 @@ export default async function DatasetsPage() {
                       {d.originalFilename}
                       {d.sheetName ? ` · ${d.sheetName}` : ""}
                       {d.sampled ? " · sampled" : ""}
+                      {d.versionCount > 1 ? ` · v${d.version} of ${d.versionCount}` : ""}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-foreground/80">{d.rowCount != null ? fmtInt(d.rowCount) : "—"}</td>

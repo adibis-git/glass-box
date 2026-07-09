@@ -1,7 +1,7 @@
 // Next.js instrumentation — runs once when the server boots.
-// Hosts the retention sweeper: datasets whose purgeAt has passed get the full
-// hard-delete treatment (kernel eviction → storage objects → row), audited as
-// a system action.
+// Hosts the retention sweeper: SourceVersions whose purgeAt has passed get the
+// full hard-delete treatment (kernel eviction → storage objects → row), audited
+// as a system action. A Source left with no versions is removed too.
 
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
@@ -12,31 +12,35 @@ export async function register() {
     try {
       const { prisma } = await import("@/lib/db");
       const { getStorage } = await import("@/server/storage");
-      const { evictKernelsForDataset } = await import("@/server/exec/registry");
+      const { evictKernelsForVersions } = await import("@/server/exec/registry");
       const { audit } = await import("@/lib/audit");
 
-      const due = await prisma.dataset.findMany({
+      const due = await prisma.sourceVersion.findMany({
         where: { purgeAt: { lte: new Date() } },
         take: 50,
+        include: { source: { select: { orgId: true } } },
       });
       if (due.length === 0) return;
 
       const storage = getStorage();
-      for (const d of due) {
-        await evictKernelsForDataset(d.id).catch(() => {});
-        if (d.storageKey) await storage.delete(d.storageKey).catch(() => {});
-        if (d.originalStorageKey) await storage.delete(d.originalStorageKey).catch(() => {});
-        await prisma.dataset.delete({ where: { id: d.id } });
+      await evictKernelsForVersions(due.map((v) => v.id)).catch(() => {});
+      for (const v of due) {
+        if (v.storageKey) await storage.delete(v.storageKey).catch(() => {});
+        if (v.originalStorageKey) await storage.delete(v.originalStorageKey).catch(() => {});
+        await prisma.sourceVersion.delete({ where: { id: v.id } });
+        // Drop a source that has no remaining versions.
+        const remaining = await prisma.sourceVersion.count({ where: { sourceId: v.sourceId } });
+        if (remaining === 0) await prisma.source.delete({ where: { id: v.sourceId } }).catch(() => {});
         await audit({
-          orgId: d.orgId,
+          orgId: v.source.orgId,
           actorId: null, // system
           action: "dataset.retention_purge",
-          targetType: "dataset",
-          targetId: d.id,
-          metadata: { filename: d.originalFilename, purgeAt: d.purgeAt?.toISOString() },
+          targetType: "source",
+          targetId: v.sourceId,
+          metadata: { versionId: v.id, filename: v.originalFilename, purgeAt: v.purgeAt?.toISOString() },
         });
       }
-      console.log(`[retention] purged ${due.length} dataset(s)`);
+      console.log(`[retention] purged ${due.length} version(s)`);
     } catch (err) {
       console.error("[retention] sweep failed:", err);
     }

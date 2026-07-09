@@ -11,22 +11,35 @@ export default async function ConversationsPage() {
   if (!ctx?.active) redirect("/login");
   const org = ctx.active;
 
-  const [conversations, readyDatasets] = await Promise.all([
+  const [conversations, readySources] = await Promise.all([
     prisma.conversation.findMany({
       where: { orgId: org.id },
       orderBy: { updatedAt: "desc" },
       include: {
-        datasets: { include: { dataset: { select: { name: true } } } },
+        sources: { include: { source: { select: { name: true } } } },
         _count: { select: { messages: true } },
       },
       take: 50,
     }),
-    prisma.dataset.findMany({
-      where: { orgId: org.id, deletedAt: null, status: "READY" },
+    prisma.source.findMany({
+      where: { orgId: org.id, versions: { some: { deletedAt: null, status: "READY" } } },
       orderBy: { createdAt: "desc" },
-      select: { id: true, name: true, rowCount: true },
+      include: {
+        versions: {
+          where: { deletedAt: null, status: "READY" },
+          orderBy: { version: "desc" },
+          take: 1,
+          select: { rowCount: true },
+        },
+      },
     }),
   ]);
+  // NewConversation expects { id, name, rowCount } — surface the latest version.
+  const readyDatasets = readySources.map((s) => ({
+    id: s.id,
+    name: s.name,
+    rowCount: s.versions[0]?.rowCount ?? null,
+  }));
 
   const canCreate = org.role !== "VIEWER";
 
@@ -63,7 +76,7 @@ export default async function ConversationsPage() {
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium text-foreground">{c.title}</div>
                 <div className="truncate text-xs text-muted">
-                  {c.datasets.map((d) => d.dataset.name).join(" + ") || "no datasets"} ·{" "}
+                  {c.sources.map((d) => d.source.name).join(" + ") || "no datasets"} ·{" "}
                   {c._count.messages} messages
                 </div>
               </div>

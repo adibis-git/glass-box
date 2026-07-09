@@ -5,12 +5,12 @@ import { prisma } from "../lib/db";
 import { getKernelRegistry } from "../server/exec/registry";
 
 async function main() {
-  const ds = await prisma.dataset.findFirst({
-    where: { name: "messy_sales_v2", status: "READY" },
+  const ds = await prisma.sourceVersion.findFirst({
+    where: { source: { name: "messy_sales_v2" }, status: "READY" },
     orderBy: { createdAt: "desc" },
   });
-  if (!ds) throw new Error("messy_sales_v2 dataset not found");
-  const refs = [{ datasetId: ds.id, alias: "df", storageKey: ds.storageKey }];
+  if (!ds) throw new Error("messy_sales_v2 source version not found");
+  const refs = [{ versionId: ds.id, alias: "df", storageKey: ds.storageKey }];
   const registry = getKernelRegistry();
   const convId = "test-conv-1";
 
@@ -29,8 +29,8 @@ async function main() {
   const r3 = await registry.run(convId, refs, "import os\nprint(os.listdir('.'))");
   console.log(`   blocked=${r3.blocked} error=${r3.isError}`);
 
-  console.log("4. evictForDataset + rerun (should rebuild)...");
-  await registry.evictForDataset(ds.id);
+  console.log("4. evictForVersions + rerun (should rebuild)...");
+  await registry.evictForVersions([ds.id]);
   t = Date.now();
   const r4 = await registry.run(convId, refs, "print(len(df))");
   console.log(`   ${Date.now() - t}ms rebuilt=${r4.kernelRebuilt} → ${r4.output.trim()}`);

@@ -17,26 +17,34 @@ async function main() {
       memberships: { create: { userId: user.id, role: "OWNER" } },
     },
   });
-  const ds = await prisma.dataset.create({
+  const source = await prisma.source.create({
     data: {
       orgId: org.id,
-      uploadedById: user.id,
+      kind: "TABULAR",
       name: "test",
-      originalFilename: "t.csv",
-      mimeType: "text/csv",
-      sizeBytes: BigInt(1234),
-      storageKey: "k/test.csv",
-      columnSchema: [{ name: "a", dtype: "integer" }],
-      sampleRows: [{ a: 1 }],
-      status: "READY",
+      versions: {
+        create: {
+          version: 1,
+          uploadedById: user.id,
+          originalFilename: "t.csv",
+          mimeType: "text/csv",
+          sizeBytes: BigInt(1234),
+          storageKey: "k/test.csv",
+          columnSchema: [{ name: "a", dtype: "integer" }],
+          sampleRows: [{ a: 1 }],
+          status: "READY",
+        },
+      },
     },
+    include: { versions: true },
   });
+  const v1 = source.versions[0];
   const convo = await prisma.conversation.create({
     data: {
       orgId: org.id,
       createdById: user.id,
       title: "Spike convo",
-      datasets: { create: { datasetId: ds.id, alias: "df" } },
+      sources: { create: { sourceId: source.id, versionId: v1.id, alias: "df" } },
       messages: {
         create: {
           role: "ASSISTANT",
@@ -45,10 +53,10 @@ async function main() {
         },
       },
     },
-    include: { datasets: true, messages: true },
+    include: { sources: true, messages: true },
   });
   await prisma.auditLog.create({
-    data: { orgId: org.id, actorId: user.id, action: "dataset.upload", targetType: "dataset", targetId: ds.id },
+    data: { orgId: org.id, actorId: user.id, action: "dataset.upload", targetType: "source", targetId: source.id },
   });
 
   const membership = await prisma.membership.findUniqueOrThrow({
@@ -58,14 +66,14 @@ async function main() {
 
   console.log("ROUNDTRIP OK:", {
     user: user.email, org: org.slug, role: membership.role,
-    dataset: ds.status, convoDatasets: convo.datasets.length,
+    dataset: v1.status, convoSources: convo.sources.length,
     messageEvents: Array.isArray(convo.messages[0].events), audits,
   });
 
   // Cascade check: deleting org should remove everything
   await prisma.organization.delete({ where: { id: org.id } });
-  const left = await prisma.dataset.count({ where: { orgId: org.id } });
-  console.log("CASCADE OK: datasets left =", left);
+  const left = await prisma.source.count({ where: { orgId: org.id } });
+  console.log("CASCADE OK: sources left =", left);
   await prisma.user.delete({ where: { id: user.id } });
 }
 

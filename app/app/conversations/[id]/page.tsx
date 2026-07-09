@@ -20,7 +20,12 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
     prisma.conversation.findFirst({
       where: { id, orgId: org.id },
       include: {
-        datasets: { include: { dataset: { select: { id: true, name: true, sampled: true, rowCount: true } } } },
+        sources: {
+          include: {
+            source: { select: { id: true, name: true } },
+            version: { select: { id: true, version: true, sampled: true, rowCount: true } },
+          },
+        },
         messages: { orderBy: { createdAt: "asc" } },
       },
     }),
@@ -45,11 +50,12 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
         title: c.title,
         defaultEffort: c.defaultEffort as AnalysisEffort,
         starterQuestions: asStringArray(c.starterQuestions),
-        datasets: c.datasets.map((l) => ({
+        datasets: c.sources.map((l) => ({
           alias: l.alias,
-          name: l.dataset.name,
-          sampled: l.dataset.sampled,
-          rowCount: l.dataset.rowCount,
+          name: l.source.name,
+          sampled: l.version.sampled,
+          rowCount: l.version.rowCount,
+          version: l.version.version,
         })),
         messages: c.messages.map((m) => ({
           id: m.id,

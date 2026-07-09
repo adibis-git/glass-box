@@ -61,7 +61,7 @@ export async function POST(req: Request, { params }: Params) {
     where: { id, orgId: oid },
     include: {
       org: { select: { domain: true, vertical: true } },
-      datasets: { include: { dataset: true } },
+      sources: { include: { source: { select: { name: true } }, version: true } },
       messages: { orderBy: { createdAt: "asc" } },
     },
   });
@@ -84,21 +84,22 @@ export async function POST(req: Request, { params }: Params) {
     return Response.json({ error: "A run is already in progress for this conversation." }, { status: 409 });
   }
 
-  const datasets: RunnerDataset[] = conversation.datasets.map((l) => {
-    const raw = l.dataset.profile as { columns?: ColumnProfile[]; domain?: DatasetDomain } | null;
+  const datasets: RunnerDataset[] = conversation.sources.map((l) => {
+    const v = l.version; // the pinned SourceVersion (v3 §2)
+    const raw = v.profile as { columns?: ColumnProfile[]; domain?: DatasetDomain } | null;
     const profile =
       raw && Array.isArray(raw.columns)
         ? { columns: raw.columns, domain: raw.domain }
         : undefined;
     return {
-      datasetId: l.dataset.id,
+      versionId: v.id,
       alias: l.alias,
-      storageKey: l.dataset.storageKey,
-      name: l.dataset.name,
-      rowCount: l.dataset.rowCount,
-      sampled: l.dataset.sampled,
-      columnSchema: (l.dataset.columnSchema as { name: string; dtype: string }[]) ?? [],
-      sampleRows: (l.dataset.sampleRows as Record<string, unknown>[]) ?? [],
+      storageKey: v.storageKey,
+      name: l.source.name,
+      rowCount: v.rowCount,
+      sampled: v.sampled,
+      columnSchema: (v.columnSchema as { name: string; dtype: string }[]) ?? [],
+      sampleRows: (v.sampleRows as Record<string, unknown>[]) ?? [],
       profile,
     };
   });

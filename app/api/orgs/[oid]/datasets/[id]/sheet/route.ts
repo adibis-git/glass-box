@@ -22,8 +22,15 @@ export async function POST(req: Request, { params }: Params) {
     const sheetName = String(body.sheetName ?? "").trim();
     if (!sheetName) return Response.json({ error: "sheetName is required." }, { status: 400 });
 
-    const d = await prisma.dataset.findFirst({ where: { id, orgId: oid, deletedAt: null } });
-    if (!d) return Response.json({ error: "Dataset not found." }, { status: 404 });
+    // `id` is the Source id; resolve its latest live version awaiting a sheet.
+    const source = await prisma.source.findFirst({
+      where: { id, orgId: oid },
+      include: {
+        versions: { where: { deletedAt: null }, orderBy: { version: "desc" }, take: 1 },
+      },
+    });
+    const d = source?.versions[0];
+    if (!source || !d) return Response.json({ error: "Dataset not found." }, { status: 404 });
     if (d.status !== "NEEDS_SHEET_PICK" || !d.originalStorageKey) {
       return Response.json({ error: "This dataset doesn't need a sheet pick." }, { status: 409 });
     }
@@ -51,14 +58,14 @@ export async function POST(req: Request, { params }: Params) {
     try {
       if (result.sampleRows && result.columnSchema) {
         const columns = computeColumnProfiles(result.sampleRows, result.columnSchema);
-        const domain = await describeDataset(d.name, columns, result.sampleRows);
+        const domain = await describeDataset(source.name, columns, result.sampleRows);
         profile = { columns, ...(domain ? { domain } : {}) };
       }
     } catch {
       profile = undefined;
     }
 
-    const updated = await prisma.dataset.update({
+    const updated = await prisma.sourceVersion.update({
       where: { id: d.id },
       data: {
         storageKey: normalizedKey,
@@ -75,11 +82,11 @@ export async function POST(req: Request, { params }: Params) {
 
     await audit({
       orgId: oid, actorId: ctx.userId, action: "dataset.sheet_pick",
-      targetType: "dataset", targetId: d.id,
-      metadata: { sheetName, rows: result.rowCount }, req,
+      targetType: "source", targetId: source.id,
+      metadata: { versionId: d.id, sheetName, rows: result.rowCount }, req,
     });
 
-    return Response.json({ dataset: { id: updated.id, status: updated.status, rowCount: updated.rowCount } });
+    return Response.json({ dataset: { id: source.id, status: updated.status, rowCount: updated.rowCount } });
   } catch (err) {
     return authzErrorResponse(err) ?? Response.json({ error: "Failed." }, { status: 500 });
   }

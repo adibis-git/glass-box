@@ -289,7 +289,7 @@ export async function runAgentTurn(input: RunnerInput): Promise<RunnerOutput> {
   const { provider, apiKey } = chooseProvider();
   const registry = getKernelRegistry();
   const refs: DatasetRef[] = datasets.map((d) => ({
-    datasetId: d.datasetId,
+    versionId: d.versionId,
     alias: d.alias,
     storageKey: d.storageKey,
   }));

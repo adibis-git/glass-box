@@ -35,7 +35,7 @@ interface ConversationProp {
   title: string;
   defaultEffort: AnalysisEffort;
   starterQuestions: string[];
-  datasets: { alias: string; name: string; sampled: boolean; rowCount: number | null }[];
+  datasets: { alias: string; name: string; sampled: boolean; rowCount: number | null; version?: number }[];
   messages: MessageProp[];
 }
 
@@ -335,6 +335,7 @@ export function ConversationWorkspace({
                   title={`${d.name}${d.rowCount ? ` · ${fmtInt(d.rowCount)} rows` : ""}`}
                 >
                   {d.alias} = {d.name}
+                  {d.version ? <span className="text-muted"> v{d.version}</span> : null}
                   {d.sampled && <span className="text-amber"> (sample)</span>}
                 </span>
               ))}

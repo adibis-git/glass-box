@@ -24,7 +24,7 @@ export async function GET(_req: Request, { params }: Params) {
       where: { orgId: oid },
       orderBy: { updatedAt: "desc" },
       include: {
-        datasets: { include: { dataset: { select: { id: true, name: true } } } },
+        sources: { include: { source: { select: { id: true, name: true } } } },
         _count: { select: { messages: true } },
       },
       take: 100,
@@ -60,11 +60,23 @@ export async function POST(req: Request, { params }: Params) {
       aliases.add(l.alias);
     }
 
-    const datasets = await prisma.dataset.findMany({
-      where: { id: { in: links.map((l) => l.datasetId) }, orgId: oid, deletedAt: null, status: "READY" },
-      select: { id: true, name: true, rowCount: true, sampled: true, sampleRows: true, profile: true },
+    // Each `datasetId` is a Source id; pin its latest live READY version (v3 §2).
+    const sources = await prisma.source.findMany({
+      where: { id: { in: links.map((l) => l.datasetId) }, orgId: oid },
+      select: {
+        id: true, name: true,
+        versions: {
+          where: { deletedAt: null, status: "READY" },
+          orderBy: { version: "desc" },
+          take: 1,
+          select: { id: true, rowCount: true, sampled: true, sampleRows: true, profile: true },
+        },
+      },
     });
-    if (datasets.length !== links.length) {
+    const latestBySource = new Map(
+      sources.filter((s) => s.versions.length > 0).map((s) => [s.id, { source: s, version: s.versions[0] }]),
+    );
+    if (latestBySource.size !== links.length) {
       return Response.json(
         { error: "One or more datasets were not found or are not ready." },
         { status: 400 },
@@ -73,16 +85,22 @@ export async function POST(req: Request, { params }: Params) {
 
     const title =
       String(body.title ?? "").trim() ||
-      `Analysis of ${datasets.map((d) => d.name).join(" + ")}`.slice(0, 120);
+      `Analysis of ${links.map((l) => latestBySource.get(l.datasetId)!.source.name).join(" + ")}`.slice(0, 120);
 
     const conversation = await prisma.conversation.create({
       data: {
         orgId: oid,
         createdById: ctx.userId,
         title,
-        datasets: { create: links.map((l) => ({ datasetId: l.datasetId, alias: l.alias })) },
+        sources: {
+          create: links.map((l) => ({
+            sourceId: l.datasetId,
+            versionId: latestBySource.get(l.datasetId)!.version.id,
+            alias: l.alias,
+          })),
+        },
       },
-      include: { datasets: true },
+      include: { sources: true },
     });
 
     await audit({
@@ -103,18 +121,17 @@ export async function POST(req: Request, { params }: Params) {
           select: { domain: true, vertical: true },
         }),
       ]);
-      const byId = new Map(datasets.map((d) => [d.id, d]));
       const dctx: DatasetContext[] = links.map((l) => {
-        const d = byId.get(l.datasetId)!;
-        const raw = d.profile as { columns?: ColumnProfile[]; domain?: DatasetDomain } | null;
+        const { source: s, version: v } = latestBySource.get(l.datasetId)!;
+        const raw = v.profile as { columns?: ColumnProfile[]; domain?: DatasetDomain } | null;
         return {
           alias: l.alias,
-          name: d.name,
-          rowCount: d.rowCount,
-          sampled: d.sampled,
+          name: s.name,
+          rowCount: v.rowCount,
+          sampled: v.sampled,
           columns: raw && Array.isArray(raw.columns) ? raw.columns : [],
           domain: raw?.domain,
-          sampleRows: (d.sampleRows as Record<string, unknown>[]) ?? [],
+          sampleRows: (v.sampleRows as Record<string, unknown>[]) ?? [],
         };
       });
       const pack = buildContextPack({

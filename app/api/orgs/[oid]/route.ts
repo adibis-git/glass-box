@@ -64,8 +64,8 @@ export async function DELETE(req: Request, { params }: Params) {
   try {
     const ctx = await authorize(oid, "OWNER");
     // Collect storage keys BEFORE the cascade wipes the rows.
-    const datasets = await prisma.dataset.findMany({
-      where: { orgId: oid },
+    const versions = await prisma.sourceVersion.findMany({
+      where: { source: { orgId: oid } },
       select: { storageKey: true, originalStorageKey: true },
     });
     await prisma.organization.delete({ where: { id: oid } });
@@ -73,12 +73,12 @@ export async function DELETE(req: Request, { params }: Params) {
     // Best-effort storage cleanup (import lazily to keep the route light).
     const { getStorage } = await import("@/server/storage");
     const storage = getStorage();
-    for (const d of datasets) {
-      await storage.delete(d.storageKey).catch(() => {});
-      if (d.originalStorageKey) await storage.delete(d.originalStorageKey).catch(() => {});
+    for (const v of versions) {
+      if (v.storageKey) await storage.delete(v.storageKey).catch(() => {});
+      if (v.originalStorageKey) await storage.delete(v.originalStorageKey).catch(() => {});
     }
 
-    console.log(`[org.delete] org=${oid} by=${ctx.userId} datasets=${datasets.length}`);
+    console.log(`[org.delete] org=${oid} by=${ctx.userId} versions=${versions.length}`);
     return Response.json({ ok: true });
   } catch (err) {
     return authzErrorResponse(err) ?? Response.json({ error: "Failed." }, { status: 500 });

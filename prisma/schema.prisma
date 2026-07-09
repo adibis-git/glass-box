@@ -19,11 +19,18 @@ enum Role {
   VIEWER
 }
 
+// Reused as the per-version status (name kept to minimize churn; v3 §2).
 enum DatasetStatus {
   PROCESSING
   NEEDS_SHEET_PICK
   READY
   ERROR
+}
+
+// A Source is tabular (CSV/Excel) or a document (PDF/DOCX/TXT) — v3 §2.
+enum SourceKind {
+  TABULAR
+  DOCUMENT
 }
 
 enum MessageRole {
@@ -99,7 +106,7 @@ model Organization {
 
   memberships   Membership[]
   invitations   Invitation[]
-  datasets      Dataset[]
+  sources       Source[]
   conversations Conversation[]
   reports       ReportSnapshot[]
   auditLogs     AuditLog[]
@@ -137,11 +144,31 @@ model Invitation {
   @@index([email])
 }
 
-model Dataset {
+// The logical artifact ("Q3 Vendor RFP", "sales_prospects") — v3 §2.
+// Has many versions (v1, v2…); conversations pin a specific version.
+model Source {
+  id        String     @id @default(cuid())
+  orgId     String
+  kind      SourceKind @default(TABULAR)
+  name      String
+  domain    String? // optional per-source override of org domain/vertical
+  vertical  String?
+  createdAt DateTime   @default(now())
+
+  org         Organization         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  versions    SourceVersion[]
+  links       ConversationSource[]
+  comparisons Comparison[]
+
+  @@index([orgId, kind])
+}
+
+// One uploaded revision of a Source. Absorbs today's Dataset fields (v3 §2).
+model SourceVersion {
   id                 String        @id @default(cuid())
-  orgId              String
+  sourceId           String
+  version            Int // 1..n, monotonic per source
   uploadedById       String? // survives user deletion
-  name               String
   originalFilename   String
   mimeType           String
   sizeBytes          BigInt
@@ -162,11 +189,41 @@ model Dataset {
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
-  org               Organization          @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  conversationLinks ConversationDataset[]
+  source            Source               @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  conversationLinks ConversationSource[]
 
-  @@index([orgId, status, deletedAt])
+  @@unique([sourceId, version])
+  @@index([status, deletedAt])
   @@index([purgeAt])
+}
+
+// Conversations attach a Source and PIN a version (defaults to latest). v3 §2.
+model ConversationSource {
+  conversationId String
+  sourceId       String
+  versionId      String // the pinned SourceVersion
+  alias          String // python variable name (tabular) / doc handle
+
+  conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  source       Source        @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  version      SourceVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, sourceId])
+  @@unique([conversationId, alias])
+}
+
+// Cached diff between two versions of a source (v3 §15).
+model Comparison {
+  id          String   @id @default(cuid())
+  sourceId    String
+  fromVersion Int
+  toVersion   Int
+  summary     Json // structured diff + Claude "what materially changed"
+  createdAt   DateTime @default(now())
+
+  source Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceId, fromVersion, toVersion])
 }
 
 model Conversation {
@@ -179,25 +236,12 @@ model Conversation {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  org      Organization          @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  datasets ConversationDataset[]
+  org      Organization         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  sources  ConversationSource[]
   messages Message[]
   reports  ReportSnapshot[]
 
   @@index([orgId, updatedAt(sort: Desc)])
-}
-
-// Multi-dataset conversations (joins). alias = python variable name.
-model ConversationDataset {
-  conversationId String
-  datasetId      String
-  alias          String
-
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  dataset      Dataset      @relation(fields: [datasetId], references: [id], onDelete: Cascade)
-
-  @@id([conversationId, datasetId])
-  @@unique([conversationId, alias])
 }
 
 model Message {

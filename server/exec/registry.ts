@@ -13,7 +13,8 @@ const IDLE_TTL_MS = 15 * 60_000;
 const SWEEP_EVERY_MS = 60_000;
 
 export interface DatasetRef {
-  datasetId: string;
+  /** The pinned SourceVersion id — kernel identity for load/reload/eviction. */
+  versionId: string;
   alias: string;
   storageKey: string;
 }
@@ -66,9 +67,11 @@ class KernelRegistry {
 
     const storage = getStorage();
     for (const d of datasets) {
-      if (!kernel.loaded.has(d.alias)) {
+      // (Re)load when the alias isn't loaded yet, or the conversation adopted a
+      // different SourceVersion for this alias (v3 §15.1) — reload the dataframe.
+      if (kernel.loaded.get(d.alias) !== d.versionId) {
         const csv = await storage.getText(d.storageKey);
-        await kernel.loadDataframe(d.alias, csv, d.datasetId);
+        await kernel.loadDataframe(d.alias, csv, d.versionId);
       }
     }
     return { kernel, rebuilt };
@@ -110,9 +113,11 @@ class KernelRegistry {
     this.kernels.delete(conversationId);
   }
 
-  async evictForDataset(datasetId: string): Promise<void> {
+  /** Evict any kernel holding one of the given SourceVersion ids. */
+  async evictForVersions(versionIds: string[]): Promise<void> {
+    const set = new Set(versionIds);
     for (const [cid, k] of this.kernels) {
-      if ([...k.loaded.values()].includes(datasetId)) {
+      if ([...k.loaded.values()].some((id) => set.has(id))) {
         k.kill();
         this.kernels.delete(cid);
       }
@@ -126,6 +131,6 @@ export function getKernelRegistry(): KernelRegistry {
   return g.__gbKernelRegistry;
 }
 
-export async function evictKernelsForDataset(datasetId: string): Promise<void> {
-  await getKernelRegistry().evictForDataset(datasetId);
+export async function evictKernelsForVersions(versionIds: string[]): Promise<void> {
+  await getKernelRegistry().evictForVersions(versionIds);
 }
