@@ -140,11 +140,11 @@ export default function SecurityPage() {
 
       <LegalSection title="Responsible disclosure">
         <LegalP>
-          If you believe you have found a security vulnerability, please report it privately to
-          the security contact designated in your deployment agreement rather than disclosing it
-          publicly. Replace this line with your organization&apos;s security contact address so
-          researchers can reach you. We appreciate good-faith reports and will work to validate
-          and remediate confirmed issues promptly.
+          If you believe you have found a security vulnerability, please report it privately
+          through our <a href="/demo" className="text-accent underline">contact page</a> rather
+          than disclosing it publicly, and enterprise customers may also use the security contact
+          in their deployment agreement. We appreciate good-faith reports and will work to
+          validate and remediate confirmed issues promptly.
         </LegalP>
       </LegalSection>
     </LegalPage>

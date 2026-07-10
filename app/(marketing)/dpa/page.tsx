@@ -4,7 +4,7 @@ import { LegalPage, LegalSection, LegalP, LegalList } from "@/components/marketi
 export const metadata: Metadata = {
   title: "Data Processing Addendum — Glass Box",
   description:
-    "A template Data Processing Addendum for Glass Box covering roles, processing details, subprocessors, security, data subject requests, breach notification, and transfers.",
+    "The Data Processing Addendum for Glass Box covering roles, processing details, subprocessors, security, data subject requests, breach notification, and transfers.",
 };
 
 export default function DpaPage() {
@@ -12,10 +12,10 @@ export default function DpaPage() {
     <LegalPage title="Data Processing Addendum" lastUpdated="July 10, 2026">
       <LegalP>
         This Data Processing Addendum (&ldquo;DPA&rdquo;) supplements the agreement between the
-        customer (&ldquo;Customer&rdquo;) and Glass Box governing use of the Service. It is a
-        template describing how personal data is processed. Because Glass Box is self-hosted by
-        design, the allocation of roles differs from a typical multi-tenant SaaS DPA — read the
-        roles section carefully and adapt the placeholders with counsel.
+        customer (&ldquo;Customer&rdquo;) and Glass Box governing use of the Service, and describes
+        how personal data is processed. Because Glass Box is self-hosted by design, the allocation
+        of roles differs from a typical multi-tenant SaaS DPA — the roles section below sets out
+        how responsibilities are divided for a self-hosted deployment.
       </LegalP>
 
       <LegalSection title="1. Roles of the parties">
@@ -143,19 +143,22 @@ export default function DpaPage() {
 
       <LegalSection title="11. International transfers">
         <LegalP>
-          Where Glass Box processes personal data as a processor and a transfer requires a
-          safeguard, the parties will rely on an appropriate mechanism such as the Standard
-          Contractual Clauses [insert applicable module and jurisdiction]. In a self-hosted
+          Where Glass Box processes personal data as a processor and a cross-border transfer
+          requires a safeguard, the parties will rely on an appropriate mechanism — for transfers
+          subject to the EU GDPR, the Standard Contractual Clauses (Module Two: controller to
+          processor); and for personal data governed by India&apos;s Digital Personal Data
+          Protection Act, 2023, the transfer conditions set out under that Act. In a self-hosted
           deployment, transfer and residency are determined by where the Customer chooses to run
-          the software. Complete these placeholders with counsel.
+          the software, and personal data typically remains within the Customer&apos;s own
+          environment.
         </LegalP>
       </LegalSection>
 
       <LegalSection title="12. Contact">
         <LegalP>
-          Requests under this DPA can be directed to the contact designated in your deployment
-          agreement. Replace this line with your organization&apos;s designated data protection
-          contact.
+          Requests under this DPA can be raised through our{" "}
+          <a href="/demo" className="text-accent underline">contact page</a>, or directed to the
+          data protection contact designated in your deployment agreement.
         </LegalP>
       </LegalSection>
     </LegalPage>

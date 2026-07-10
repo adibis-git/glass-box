@@ -177,9 +177,10 @@ export default function PrivacyPage() {
 
       <LegalSection title="11. Contact">
         <LegalP>
-          Questions about this policy or your data can be directed to your Glass Box account
-          contact or to the privacy contact designated in your deployment agreement. Replace
-          this line with your organization&apos;s designated privacy contact and address.
+          Questions about this policy or a request regarding your personal data can be raised
+          through our <a href="/demo" className="text-accent underline">contact page</a>.
+          Enterprise customers may also use the privacy contact designated in their deployment
+          agreement. We aim to respond to data requests within 30 days.
         </LegalP>
       </LegalSection>
     </LegalPage>

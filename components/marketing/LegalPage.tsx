@@ -1,11 +1,9 @@
-// Shared shell for the legal/policy template pages. Renders a constrained prose
-// container, the document title, a "last updated" line, and a prominent amber
-// caveat callout making clear these are templates — not legal advice. Body
-// content is composed from the exported <LegalSection> / <LegalP> helpers so the
-// five policy pages stay visually consistent.
+// Shared shell for the legal/policy pages. Renders a constrained prose container,
+// the document title, and a "last updated" line. Body content is composed from the
+// exported <LegalSection> / <LegalP> helpers so the five policy pages stay
+// visually consistent.
 
 import * as React from "react";
-import { AlertTriangle } from "lucide-react";
 
 export function LegalPage({
   title,
@@ -22,17 +20,6 @@ export function LegalPage({
         {title}
       </h1>
       <p className="mt-3 text-sm text-muted">Last updated: {lastUpdated}</p>
-
-      <div className="mt-6 flex gap-3 rounded-xl border border-amber/40 bg-amber/10 p-4">
-        <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber" />
-        <p className="text-sm leading-relaxed text-foreground/90">
-          <span className="font-semibold text-foreground">This document is a template</span>{" "}
-          provided for informational purposes only and does not constitute legal advice.
-          Review and adapt it with qualified counsel before relying on it in production. It
-          contains placeholders (jurisdictions, entity names, contact details) that you must
-          complete for your organization.
-        </p>
-      </div>
 
       <div className="mt-8">{children}</div>
     </section>

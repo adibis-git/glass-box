@@ -127,10 +127,10 @@ export default function TermsPage() {
 
       <LegalSection title="11. Governing law">
         <LegalP>
-          These Terms are governed by the laws of [Governing Jurisdiction], without regard to
-          its conflict-of-laws rules, and the parties submit to the exclusive jurisdiction of
-          the courts located in [Venue]. Replace these placeholders with the jurisdiction and
-          venue appropriate to your organization.
+          These Terms are governed by the laws of India, without regard to its conflict-of-laws
+          rules, and the parties submit to the exclusive jurisdiction of the courts of Bengaluru,
+          Karnataka, India. Where a separate enterprise deployment agreement specifies a
+          different governing law or venue, that agreement controls for the deployment it covers.
         </LegalP>
       </LegalSection>
 
@@ -144,9 +144,9 @@ export default function TermsPage() {
 
       <LegalSection title="13. Contact">
         <LegalP>
-          Questions about these Terms can be directed to your Glass Box account contact or the
-          contact designated in your deployment agreement. Replace this line with your
-          organization&apos;s designated legal contact.
+          Questions about these Terms can be raised through our{" "}
+          <a href="/demo" className="text-accent underline">contact page</a>. Enterprise customers
+          may also use the legal contact designated in their deployment agreement.
         </LegalP>
       </LegalSection>
     </LegalPage>

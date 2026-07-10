@@ -60,8 +60,8 @@ export default function CookiesPage() {
 
       <LegalSection title="5. Contact">
         <LegalP>
-          Questions about this policy can be directed to your Glass Box account contact. Replace
-          this line with your organization&apos;s designated privacy contact.
+          Questions about this policy can be raised through our{" "}
+          <a href="/demo" className="text-accent underline">contact page</a>.
         </LegalP>
       </LegalSection>
     </LegalPage>
