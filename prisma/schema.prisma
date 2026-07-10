@@ -118,13 +118,17 @@ model Membership {
   orgId     String
   role      Role     @default(MEMBER)
   persona   Persona? // functional role for persona-aware framing (v3 §3)
+  managerId String? // Membership.id of this member's manager, same org — the reporting structure (dashboard team scoping)
   createdAt DateTime @default(now())
 
-  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org     Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  manager Membership?  @relation("TeamHierarchy", fields: [managerId], references: [id], onDelete: SetNull)
+  reports Membership[] @relation("TeamHierarchy")
 
   @@unique([userId, orgId])
   @@index([orgId])
+  @@index([managerId])
 }
 
 model Invitation {

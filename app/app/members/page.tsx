@@ -15,6 +15,11 @@ export default async function MembersPage() {
     orderBy: { createdAt: "asc" },
   });
 
+  // Membership.id → display name, so we can resolve each member's manager.
+  const nameByMembershipId = new Map(
+    members.map((m) => [m.id, m.user.name ?? m.user.email]),
+  );
+
   const isAdmin = org.role === "ADMIN" || org.role === "OWNER";
   const invitations = isAdmin
     ? await prisma.invitation.findMany({
@@ -39,6 +44,11 @@ export default async function MembersPage() {
           name: m.user.name,
           email: m.user.email,
           role: m.role,
+          membershipId: m.id,
+          managerId: m.managerId,
+          managerName: m.managerId
+            ? nameByMembershipId.get(m.managerId) ?? null
+            : null,
         }))}
         invitations={invitations.map((i) => ({
           id: i.id,

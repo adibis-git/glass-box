@@ -7,17 +7,43 @@ import {
   Quote,
   GitCompareArrows,
   Share2,
+  Users,
   ArrowRight,
   Sparkles,
 } from "lucide-react";
 import { getActiveOrg } from "@/lib/activeOrg";
-import { getOrgInsights, type InsightScope } from "@/lib/insights";
+import { getOrgInsights, resolveViewerScope } from "@/lib/insights";
 import { fmtInt, fmtDate, fmtDateTime } from "@/lib/utils";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Button } from "@/components/ui/Button";
+import { StatCard } from "@/components/app/dashboard/StatCard";
+import { ActivityChart } from "@/components/app/dashboard/ActivityChart";
+import { WorkDonut } from "@/components/app/dashboard/WorkDonut";
+import { CategoryBars } from "@/components/app/dashboard/CategoryBars";
+import { TeamWorkloadChart } from "@/components/app/dashboard/TeamWorkloadChart";
+import { MostActiveTable } from "@/components/app/dashboard/MostActiveTable";
+import type { DashboardMember } from "@/components/app/dashboard/types";
 
 export const dynamic = "force-dynamic";
 
+/** Compact relative-time on the server so a plain string crosses the boundary. */
+function relativeTime(d: Date | null): string | null {
+  if (!d) return null;
+  const ms = Date.now() - d.getTime();
+  const sec = Math.max(0, Math.floor(ms / 1000));
+  if (sec < 60) return "just now";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 30) return `${day}d ago`;
+  const mo = Math.floor(day / 30);
+  if (mo < 12) return `${mo}mo ago`;
+  return `${Math.floor(day / 365)}y ago`;
+}
+
+/** Small server-rendered tile (no sparkline) for the secondary metrics. */
 function StatTile({
   label,
   value,
@@ -41,70 +67,63 @@ function StatTile({
   );
 }
 
-function Breakdown({
-  title,
-  rows,
-}: {
-  title: string;
-  rows: { label: string; value: number }[];
-}) {
-  const total = rows.reduce((s, r) => s + r.value, 0);
-  return (
-    <div className="rounded-2xl border border-border bg-panel p-5">
-      <div className="mb-4 text-sm font-semibold text-foreground">{title}</div>
-      {total === 0 ? (
-        <div className="py-4 text-center text-xs text-muted">No analyses yet.</div>
-      ) : (
-        <ul className="space-y-2.5">
-          {rows.map((r) => {
-            const pct = total === 0 ? 0 : Math.round((r.value / total) * 100);
-            return (
-              <li key={r.label} className="flex items-center gap-3 text-xs">
-                <span className="w-20 shrink-0 text-muted">{r.label}</span>
-                <span className="relative h-4 flex-1 overflow-hidden rounded bg-panel-2">
-                  <span
-                    className="absolute inset-y-0 left-0 rounded bg-accent/30"
-                    style={{ width: `${pct}%` }}
-                    aria-hidden
-                  />
-                </span>
-                <span className="w-16 shrink-0 text-right font-mono text-foreground/80">
-                  {fmtInt(r.value)}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
-}
-
 export default async function AppHome() {
   const ctx = await getActiveOrg();
   if (!ctx?.active) redirect("/login");
   const org = ctx.active;
 
-  const isManager = org.role === "OWNER" || org.role === "ADMIN";
-  const scope: InsightScope = isManager ? "team" : "personal";
+  const view = await resolveViewerScope(org.id, ctx.userId, org.role);
+  const insights = await getOrgInsights(org.id, {
+    scope: view.scope,
+    userId: view.userId,
+    subtreeUserIds: view.subtreeUserIds,
+  });
 
-  const insights = await getOrgInsights(org.id, { scope, userId: ctx.userId });
-  const { usage } = insights;
+  const {
+    scope,
+    questionsAsked,
+    analysesRun,
+    decisionReports,
+    documentAnswers,
+    versionsCompared,
+    sharedReports,
+    activeMembers,
+    intentMix,
+    effortMix,
+    modalityMix,
+    activityByDay,
+    topConversations,
+    memberActivity,
+    usage,
+  } = insights;
+
+  const title =
+    scope === "team"
+      ? "Team intelligence"
+      : scope === "reports"
+        ? `${ctx.userName ?? "Your"} team`
+        : "Your intelligence";
+  const subtitle =
+    "How this workspace turns its own data and documents into verifiable decisions — every run stays inside your infrastructure.";
+
+  // Serialize member rows (Date → relative string) before the client boundary.
+  const members: DashboardMember[] = memberActivity.map((m) => ({
+    userId: m.userId,
+    name: m.name,
+    isManager: m.isManager,
+    analyses: m.analyses,
+    decisionReports: m.decisionReports,
+    lastActive: relativeTime(m.lastActive),
+  }));
+
+  const showTeam = scope !== "personal" && memberActivity.length > 0;
+  const activeMemberCount = memberActivity.filter((m) => m.analyses > 0).length;
   const maxDay = Math.max(1, ...usage.byDay.map((d) => d.tokens));
-  const maxRuns = Math.max(1, ...insights.teamActivity.map((m) => m.runs));
-
-  const empty = insights.questionsAsked === 0;
+  const empty = analysesRun.value === 0;
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-      <PageHeader
-        title={isManager ? "Team intelligence" : "Your intelligence"}
-        subtitle={
-          isManager
-            ? `How ${org.name} turns its own data and documents into verifiable decisions — every run stays inside your infrastructure.`
-            : "How your questions become verifier-checked answers and decision reports — from your own data, without a file leaving your infrastructure."
-        }
-      />
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+      <PageHeader title={title} subtitle={subtitle} />
 
       {empty ? (
         <div className="rounded-2xl border border-border bg-panel p-8 text-center">
@@ -112,11 +131,11 @@ export default async function AppHome() {
             <Sparkles className="h-5 w-5" />
           </div>
           <h2 className="mt-4 text-base font-semibold text-foreground">
-            Your first analysis starts here
+            Ask your first question
           </h2>
           <p className="mx-auto mt-1.5 max-w-md text-sm text-muted">
-            Upload a spreadsheet or a document, then ask a question in plain English. Glass Box runs
-            the analysis, cites its sources, and drafts a decision report — all on your own
+            Upload a spreadsheet or a document, then ask a question in plain English. Glass Box
+            runs the analysis, cites its sources, and drafts a decision report — all on your own
             infrastructure.
           </p>
           <div className="mt-5 flex items-center justify-center gap-3">
@@ -133,78 +152,141 @@ export default async function AppHome() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-            <StatTile
+          {/* Primary metrics — trend + sparkline. */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
               label="Questions asked"
-              value={fmtInt(insights.questionsAsked)}
-              hint={isManager ? "across the team" : "by you"}
-              icon={MessagesSquare}
+              icon={<MessagesSquare className="h-4 w-4" />}
+              trend={questionsAsked}
             />
-            <StatTile
+            <StatCard
               label="Analyses run"
-              value={fmtInt(insights.analysesRun)}
-              hint="verifier-checked"
-              icon={BarChart3}
+              icon={<BarChart3 className="h-4 w-4" />}
+              trend={analysesRun}
             />
-            <StatTile
+            <StatCard
               label="Decision reports"
-              value={fmtInt(insights.decisionReports)}
-              hint="structured recommendations"
-              icon={FileCheck2}
+              icon={<FileCheck2 className="h-4 w-4" />}
+              trend={decisionReports}
             />
-            <StatTile
-              label="Clauses cited"
-              value={fmtInt(insights.documentAnswers)}
-              hint="grounded in documents"
-              icon={Quote}
+            <StatCard
+              label="Document answers"
+              icon={<Quote className="h-4 w-4" />}
+              trend={documentAnswers}
             />
+          </div>
+
+          {/* Secondary metrics — simple tiles. */}
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <StatTile
               label="Versions compared"
-              value={fmtInt(insights.versionsCompared)}
+              value={fmtInt(versionsCompared)}
               hint="what materially changed"
               icon={GitCompareArrows}
             />
             <StatTile
               label="Shared reports"
-              value={fmtInt(insights.sharedReports)}
+              value={fmtInt(sharedReports)}
               hint="published to stakeholders"
               icon={Share2}
             />
+            <StatTile
+              label="Active members"
+              value={fmtInt(activeMembers)}
+              hint={scope === "personal" ? "you" : "with activity"}
+              icon={Users}
+            />
           </div>
 
+          {/* Honest impact line. */}
           <p className="mt-4 text-sm leading-relaxed text-muted">
-            <span className="font-medium text-foreground">
-              {fmtInt(insights.decisionReports)}
-            </span>{" "}
-            verifier-checked decision report{insights.decisionReports === 1 ? "" : "s"} and{" "}
-            <span className="font-medium text-foreground">{fmtInt(insights.documentAnswers)}</span>{" "}
-            cited document answer{insights.documentAnswers === 1 ? "" : "s"} produced from{" "}
-            {isManager ? "your team's" : "your"} own data — without a file leaving your
-            infrastructure.
+            <span className="font-medium text-foreground">{fmtInt(decisionReports.value)}</span>{" "}
+            verifier-checked decision report{decisionReports.value === 1 ? "" : "s"} and{" "}
+            <span className="font-medium text-foreground">{fmtInt(documentAnswers.value)}</span>{" "}
+            cited document answer{documentAnswers.value === 1 ? "" : "s"} from your own data —
+            nothing left your infrastructure.
           </p>
 
+          {/* Activity (wide) + Data/Documents donut. */}
+          <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <ActivityChart data={activityByDay} />
+            </div>
+            <WorkDonut data={modalityMix.data} documents={modalityMix.documents} />
+          </div>
+
+          {/* Intent + Effort mixes. */}
           <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Breakdown
-              title="Analysis depth"
-              rows={[
-                { label: "Quick", value: insights.effortMix.LOW },
-                { label: "Standard", value: insights.effortMix.MEDIUM },
-                { label: "Deep", value: insights.effortMix.HIGH },
+            <CategoryBars
+              title="What was asked for"
+              items={[
+                { label: "Quick facts", value: intentMix.quick_fact, color: "var(--blue)" },
+                { label: "Analytical", value: intentMix.analytical, color: "var(--accent)" },
+                { label: "Decisions", value: intentMix.decision, color: "var(--green)" },
+                { label: "Other", value: intentMix.other, color: "var(--muted)" },
               ]}
             />
-            <Breakdown
-              title="What you asked for"
-              rows={[
-                { label: "Quick facts", value: insights.intentMix.quick_fact },
-                { label: "Analysis", value: insights.intentMix.analytical },
-                { label: "Decisions", value: insights.intentMix.decision },
-                ...(insights.intentMix.other > 0
-                  ? [{ label: "Other", value: insights.intentMix.other }]
-                  : []),
+            <CategoryBars
+              title="Analysis depth"
+              items={[
+                { label: "Low", value: effortMix.LOW, color: "var(--blue)" },
+                { label: "Medium", value: effortMix.MEDIUM, color: "var(--amber)" },
+                { label: "High", value: effortMix.HIGH, color: "var(--accent)" },
               ]}
             />
           </div>
 
+          {/* Team reporting (team / reports scope only). */}
+          {showTeam && (
+            <>
+              <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <TeamWorkloadChart members={members} />
+                <MostActiveTable members={members} />
+              </div>
+              {activeMemberCount <= 1 && (
+                <p className="mt-3 text-xs text-muted">
+                  Invite members and assign managers to see team reporting fill out.
+                </p>
+              )}
+            </>
+          )}
+
+          {/* Recent conversations. */}
+          <div className="mt-6 rounded-2xl border border-border bg-panel p-5">
+            <div className="mb-4 flex items-baseline justify-between">
+              <div className="text-sm font-semibold text-foreground">Recent conversations</div>
+              <Link href="/app/conversations" className="text-xs text-accent hover:brightness-110">
+                View all
+              </Link>
+            </div>
+            {topConversations.length === 0 ? (
+              <div className="py-6 text-center text-sm text-muted">No conversations yet.</div>
+            ) : (
+              <ul className="divide-y divide-border">
+                {topConversations.map((c) => (
+                  <li key={c.id}>
+                    <Link
+                      href={`/app/conversations/${c.id}`}
+                      className="group flex items-center justify-between gap-4 py-2.5"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-sm text-foreground group-hover:text-accent">
+                          {c.title}
+                        </div>
+                        <div className="mt-0.5 text-xs text-muted">
+                          {fmtInt(c.messageCount)} message{c.messageCount === 1 ? "" : "s"} ·{" "}
+                          {fmtDateTime(c.updatedAt)}
+                        </div>
+                      </div>
+                      <ArrowRight className="h-4 w-4 shrink-0 text-muted group-hover:text-accent" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Workspace usage — token consumption per day. */}
           <div className="mt-6 rounded-2xl border border-border bg-panel p-5">
             <div className="mb-4 flex items-baseline justify-between">
               <div className="text-sm font-semibold text-foreground">Workspace usage</div>
@@ -240,79 +322,9 @@ export default async function AppHome() {
             )}
             <div className="mt-4 flex items-center justify-between border-t border-border pt-4 text-xs">
               <span className="text-muted">Estimated cost (workspace-wide)</span>
-              <span className="font-mono text-foreground">
-                ${usage.costEstimateUsd.toFixed(2)}
-              </span>
+              <span className="font-mono text-foreground">${usage.costEstimateUsd.toFixed(2)}</span>
             </div>
           </div>
-
-          <div className="mt-6 rounded-2xl border border-border bg-panel p-5">
-            <div className="mb-4 flex items-baseline justify-between">
-              <div className="text-sm font-semibold text-foreground">Recent conversations</div>
-              <Link
-                href="/app/conversations"
-                className="text-xs text-accent hover:brightness-110"
-              >
-                View all
-              </Link>
-            </div>
-            {insights.topConversations.length === 0 ? (
-              <div className="py-6 text-center text-sm text-muted">No conversations yet.</div>
-            ) : (
-              <ul className="divide-y divide-border">
-                {insights.topConversations.map((c) => (
-                  <li key={c.id}>
-                    <Link
-                      href={`/app/conversations/${c.id}`}
-                      className="group flex items-center justify-between gap-4 py-2.5"
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate text-sm text-foreground group-hover:text-accent">
-                          {c.title}
-                        </div>
-                        <div className="mt-0.5 text-xs text-muted">
-                          {fmtInt(c.messageCount)} message{c.messageCount === 1 ? "" : "s"} ·{" "}
-                          {fmtDateTime(c.updatedAt)}
-                        </div>
-                      </div>
-                      <ArrowRight className="h-4 w-4 shrink-0 text-muted group-hover:text-accent" />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {isManager && insights.teamActivity.length > 0 && (
-            <div className="mt-6 rounded-2xl border border-border bg-panel p-5">
-              <div className="mb-4 flex items-baseline justify-between">
-                <div className="text-sm font-semibold text-foreground">Team activity</div>
-                <Link href="/app/members" className="text-xs text-accent hover:brightness-110">
-                  Manage members
-                </Link>
-              </div>
-              <ul className="space-y-2.5">
-                {insights.teamActivity.map((m) => {
-                  const pct = Math.round((m.runs / maxRuns) * 100);
-                  return (
-                    <li key={m.userId} className="flex items-center gap-3 text-xs">
-                      <span className="w-40 shrink-0 truncate text-foreground">{m.name}</span>
-                      <span className="relative h-4 flex-1 overflow-hidden rounded bg-panel-2">
-                        <span
-                          className="absolute inset-y-0 left-0 rounded bg-accent/30"
-                          style={{ width: `${pct}%` }}
-                          aria-hidden
-                        />
-                      </span>
-                      <span className="w-24 shrink-0 text-right text-muted">
-                        {fmtInt(m.runs)} run{m.runs === 1 ? "" : "s"}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
         </>
       )}
     </div>

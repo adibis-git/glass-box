@@ -12,6 +12,9 @@ interface Member {
   name: string | null;
   email: string;
   role: Role;
+  membershipId: string;
+  managerId: string | null;
+  managerName: string | null;
 }
 interface Invitation {
   id: string;
@@ -48,6 +51,35 @@ export function MembersManager({
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Optimistic manager assignments, keyed by userId. `undefined` = fall back to props.
+  const [managerOverride, setManagerOverride] = useState<
+    Record<string, string | null>
+  >({});
+
+  // Membership.id → display name, for showing the current manager.
+  const nameByMembershipId = new Map(
+    members.map((m) => [m.membershipId, m.name ?? m.email]),
+  );
+  function currentManagerId(m: Member): string | null {
+    return m.userId in managerOverride ? managerOverride[m.userId] : m.managerId;
+  }
+
+  /** Membership.ids of `rootId` and everything reporting (transitively) under it. */
+  function subtreeOf(rootId: string): Set<string> {
+    const out = new Set<string>([rootId]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const m of members) {
+        const parent = m.userId in managerOverride ? managerOverride[m.userId] : m.managerId;
+        if (parent && out.has(parent) && !out.has(m.membershipId)) {
+          out.add(m.membershipId);
+          grew = true;
+        }
+      }
+    }
+    return out;
+  }
 
   async function invite(e: React.FormEvent) {
     e.preventDefault();
@@ -75,6 +107,26 @@ export function MembersManager({
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
       setErr(j.error ?? "Role change failed.");
+    }
+    router.refresh();
+  }
+
+  async function changeManager(m: Member, newManagerId: string | null) {
+    setErr(null);
+    const prev = currentManagerId(m);
+    // Optimistic
+    setManagerOverride((o) => ({ ...o, [m.userId]: newManagerId }));
+    const res = await fetch(`/api/orgs/${orgId}/members/${m.userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ managerId: newManagerId }),
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      setErr(j.error ?? "Manager change failed.");
+      // Revert
+      setManagerOverride((o) => ({ ...o, [m.userId]: prev }));
+      return;
     }
     router.refresh();
   }
@@ -125,45 +177,75 @@ export function MembersManager({
       )}
 
       <div className="overflow-hidden rounded-2xl border border-border bg-panel">
-        {members.map((m) => (
-          <div
-            key={m.userId}
-            className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3 last:border-0"
-          >
-            <div className="min-w-0">
-              <div className="truncate text-sm font-medium text-foreground">
-                {m.name ?? m.email}
-                {m.userId === myUserId && <span className="ml-2 text-xs text-muted">(you)</span>}
+        {members.map((m) => {
+          const editable = isAdmin && m.userId !== myUserId;
+          const mgrId = currentManagerId(m);
+          const mgrName = mgrId ? nameByMembershipId.get(mgrId) ?? null : null;
+          // Candidates: everyone except this member's own reporting subtree.
+          const excluded = subtreeOf(m.membershipId);
+          const options = members.filter((c) => !excluded.has(c.membershipId));
+          return (
+            <div
+              key={m.userId}
+              className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3 last:border-0"
+            >
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium text-foreground">
+                  {m.name ?? m.email}
+                  {m.userId === myUserId && <span className="ml-2 text-xs text-muted">(you)</span>}
+                </div>
+                <div className="truncate text-xs text-muted">{m.email}</div>
+                {!editable && (
+                  <div className="truncate text-xs text-muted">
+                    Manager: {mgrName ?? <span className="text-muted/60">none</span>}
+                  </div>
+                )}
               </div>
-              <div className="truncate text-xs text-muted">{m.email}</div>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              {isAdmin && m.userId !== myUserId ? (
-                <>
-                  <select
-                    value={m.role}
-                    onChange={(e) => changeRole(m.userId, e.target.value as Role)}
-                    className="h-8 rounded-lg border border-border bg-panel-2 px-2 text-xs text-foreground outline-none"
+              <div className="flex shrink-0 items-center gap-2">
+                {editable ? (
+                  <>
+                    <label className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted">
+                      <span className="hidden sm:inline">Manager</span>
+                      <select
+                        value={mgrId ?? ""}
+                        onChange={(e) =>
+                          changeManager(m, e.target.value === "" ? null : e.target.value)
+                        }
+                        className="h-8 max-w-[9rem] rounded-lg border border-border bg-panel-2 px-2 text-xs normal-case tracking-normal text-foreground outline-none"
+                      >
+                        <option value="">— None —</option>
+                        {options.map((c) => (
+                          <option key={c.membershipId} value={c.membershipId}>
+                            {c.name ?? c.email}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <select
+                      value={m.role}
+                      onChange={(e) => changeRole(m.userId, e.target.value as Role)}
+                      className="h-8 rounded-lg border border-border bg-panel-2 px-2 text-xs text-foreground outline-none"
+                    >
+                      <option value="OWNER">Owner</option>
+                      <option value="ADMIN">Admin</option>
+                      <option value="MEMBER">Member</option>
+                      <option value="VIEWER">Viewer</option>
+                    </select>
+                    <Button variant="ghost" size="sm" onClick={() => remove(m.userId)}>
+                      Remove
+                    </Button>
+                  </>
+                ) : (
+                  <span
+                    className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase ${ROLE_BADGE[m.role]}`}
                   >
-                    <option value="OWNER">Owner</option>
-                    <option value="ADMIN">Admin</option>
-                    <option value="MEMBER">Member</option>
-                    <option value="VIEWER">Viewer</option>
-                  </select>
-                  <Button variant="ghost" size="sm" onClick={() => remove(m.userId)}>
-                    Remove
-                  </Button>
-                </>
-              ) : (
-                <span
-                  className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase ${ROLE_BADGE[m.role]}`}
-                >
-                  {m.role}
-                </span>
-              )}
+                    {m.role}
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {isAdmin && invitations.length > 0 && (
