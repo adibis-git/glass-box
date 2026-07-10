@@ -1,17 +1,18 @@
 import { redirect } from "next/navigation";
 import { getActiveOrg } from "@/lib/activeOrg";
+import { isPlatformAdmin } from "@/lib/platformAdmin";
 import { prisma } from "@/lib/db";
 import { PageHeader } from "@/components/app/PageHeader";
 import { LeadsTable, type LeadRow } from "@/components/app/LeadsTable";
 
-// Admin-only inbox for leads captured on the public marketing site. Leads are not
-// org-scoped (they arrive anonymously), so this simply requires the viewer to be an
-// OWNER/ADMIN of their active workspace.
+// Global inbox for leads captured on the public marketing site. Leads are NOT
+// org-scoped (they arrive anonymously), so access is gated to a PLATFORM ADMIN —
+// the operator of this deployment — never a mere workspace OWNER/ADMIN (every
+// signup owns their personal workspace, which must not expose everyone's leads).
 export default async function AdminLeadsPage() {
   const ctx = await getActiveOrg();
   if (!ctx?.active) redirect("/login");
-  const isAdmin = ctx.active.role === "OWNER" || ctx.active.role === "ADMIN";
-  if (!isAdmin) redirect("/app");
+  if (!isPlatformAdmin(ctx.userEmail)) redirect("/app");
 
   const leads = await prisma.lead.findMany({
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],

@@ -4,6 +4,7 @@
 
 import { prisma } from "@/lib/db";
 import { requireSession, authzErrorResponse } from "@/lib/authz";
+import { isPlatformAdmin } from "@/lib/platformAdmin";
 import type { LeadStatus } from "@/lib/generated/prisma/client";
 
 export const runtime = "nodejs";
@@ -20,12 +21,8 @@ export async function PATCH(req: Request, { params }: Params) {
     return authzErrorResponse(err) ?? Response.json({ error: "Failed." }, { status: 500 });
   }
 
-  const isAdmin = await prisma.membership.findFirst({
-    where: { userId: session.userId, role: { in: ["OWNER", "ADMIN"] } },
-    select: { id: true },
-  });
-  if (!isAdmin) {
-    return Response.json({ error: "Admin access required." }, { status: 403 });
+  if (!isPlatformAdmin(session.email)) {
+    return Response.json({ error: "Platform admin access required." }, { status: 403 });
   }
 
   const { id } = await params;

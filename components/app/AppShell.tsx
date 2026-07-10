@@ -190,12 +190,14 @@ function SidebarBody({
   active,
   userName,
   userEmail,
+  canSeeLeads,
   onNavigate,
 }: {
   orgs: OrgSummary[];
   active: OrgSummary;
   userName: string | null;
   userEmail: string;
+  canSeeLeads: boolean;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
@@ -227,8 +229,8 @@ function SidebarBody({
           );
         })}
 
-        {/* Admin-only: marketing leads inbox (OWNER/ADMIN). */}
-        {(active.role === "OWNER" || active.role === "ADMIN") && (
+        {/* Platform-operator only: global marketing leads inbox (NOT workspace role). */}
+        {canSeeLeads && (
           <Link
             href="/app/admin/leads"
             onClick={onNavigate}
@@ -298,12 +300,14 @@ function Shell({
   active,
   userName,
   userEmail,
+  canSeeLeads,
   children,
 }: {
   orgs: OrgSummary[];
   active: OrgSummary;
   userName: string | null;
   userEmail: string;
+  canSeeLeads: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -331,7 +335,7 @@ function Shell({
       {/* Fixed desktop sidebar (md+) */}
       <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-panel md:flex">
         <Brand />
-        <SidebarBody orgs={orgs} active={active} userName={userName} userEmail={userEmail} />
+        <SidebarBody orgs={orgs} active={active} userName={userName} userEmail={userEmail} canSeeLeads={canSeeLeads} />
       </aside>
 
       {/* Mobile drawer overlay (below md) */}
@@ -358,6 +362,7 @@ function Shell({
               active={active}
               userName={userName}
               userEmail={userEmail}
+              canSeeLeads={canSeeLeads}
               onNavigate={() => setMobileOpen(false)}
             />
           </aside>
@@ -375,6 +380,7 @@ export function AppShell(props: {
   active: OrgSummary;
   userName: string | null;
   userEmail: string;
+  canSeeLeads: boolean;
   children: React.ReactNode;
 }) {
   return (

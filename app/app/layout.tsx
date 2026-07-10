@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getActiveOrg } from "@/lib/activeOrg";
+import { isPlatformAdmin } from "@/lib/platformAdmin";
 import { AppShell } from "@/components/app/AppShell";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -16,6 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       active={ctx.active}
       userName={ctx.userName}
       userEmail={ctx.userEmail}
+      canSeeLeads={isPlatformAdmin(ctx.userEmail)}
     >
       {children}
     </AppShell>
