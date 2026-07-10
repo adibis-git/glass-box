@@ -285,6 +285,31 @@ model ReportSnapshot {
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 }
 
+// Public lead captured from the marketing site (Request-a-Demo / contact).
+// Stored in-DB; reviewed in the /app admin leads view. No external sending.
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  CLOSED
+}
+
+model Lead {
+  id        String     @id @default(cuid())
+  name      String
+  email     String
+  company   String?
+  role      String?
+  message   String?    @db.Text
+  source    String? // which page/CTA: "demo", "pricing", "landing", …
+  status    LeadStatus @default(NEW)
+  ip        String?
+  userAgent String?
+  createdAt DateTime   @default(now())
+
+  @@index([status, createdAt(sort: Desc)])
+}
+
 model AuditLog {
   id         BigInt   @id @default(autoincrement())
   orgId      String

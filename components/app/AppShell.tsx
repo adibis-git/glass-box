@@ -22,6 +22,7 @@ import {
   ScanSearch,
   Menu,
   X,
+  Inbox,
   type LucideIcon,
 } from "lucide-react";
 
@@ -225,6 +226,23 @@ function SidebarBody({
             </Link>
           );
         })}
+
+        {/* Admin-only: marketing leads inbox (OWNER/ADMIN). */}
+        {(active.role === "OWNER" || active.role === "ADMIN") && (
+          <Link
+            href="/app/admin/leads"
+            onClick={onNavigate}
+            className={cn(
+              "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm",
+              pathname.startsWith("/app/admin/leads")
+                ? "bg-accent/15 font-medium text-accent"
+                : "text-foreground/75 hover:bg-panel-2 hover:text-foreground",
+            )}
+          >
+            <Inbox size={16} className="shrink-0" />
+            Leads
+          </Link>
+        )}
 
         {/* Connector teaser */}
         <div className="mt-6 px-3">
