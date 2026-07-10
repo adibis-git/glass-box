@@ -30,7 +30,7 @@ export default async function MembersPage() {
     : [];
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
       <PageHeader
         title="Members"
         subtitle="Who can see and analyze data in this workspace, and what they're allowed to do."

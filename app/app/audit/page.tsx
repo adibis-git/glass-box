@@ -12,7 +12,7 @@ export default async function AuditPage() {
 
   if (!isAdmin) {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
         <PageHeader title="Audit log" />
         <div className="rounded-2xl border border-border bg-panel p-8 text-center text-sm text-muted">
           The audit log is visible to admins and owners only.

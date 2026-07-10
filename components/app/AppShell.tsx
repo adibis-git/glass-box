@@ -6,8 +6,11 @@ import { SessionProvider, useSession, signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { TopBar } from "@/components/app/TopBar";
+import { GlobalSearch } from "@/components/app/GlobalSearch";
 import type { OrgSummary } from "@/lib/activeOrg";
 import {
+  LayoutDashboard,
   Database,
   MessagesSquare,
   ChartColumn,
@@ -26,7 +29,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-const NAV: { href: string; label: string; icon: LucideIcon }[] = [
+const NAV: { href: string; label: string; icon: LucideIcon; exact?: boolean }[] = [
+  { href: "/app", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/app/datasets", label: "Datasets", icon: Database },
   { href: "/app/conversations", label: "Conversations", icon: MessagesSquare },
   { href: "/app/usage", label: "Usage", icon: ChartColumn },
@@ -209,7 +213,7 @@ function SidebarBody({
 
       <nav className="flex-1 overflow-y-auto space-y-0.5 px-3">
         {NAV.map((item) => {
-          const activeNav = pathname.startsWith(item.href);
+          const activeNav = item.exact ? pathname === item.href : pathname.startsWith(item.href);
           const Icon = item.icon;
           return (
             <Link
@@ -280,7 +284,6 @@ function SidebarBody({
             <div className="truncate text-xs text-muted">{userEmail}</div>
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
-            <ThemeToggle className="h-7 w-7" />
             <button
               onClick={() => signOut({ callbackUrl: "/" })}
               className="rounded-md p-1.5 text-muted hover:bg-panel-2 hover:text-foreground"
@@ -323,13 +326,17 @@ function Shell({
       {/* Mobile top bar (below md) */}
       <div className="flex shrink-0 items-center justify-between border-b border-border bg-panel md:hidden">
         <Brand />
-        <button
-          onClick={() => setMobileOpen(true)}
-          className="mr-2 rounded-md p-2 text-muted hover:bg-panel-2 hover:text-foreground"
-          aria-label="Open navigation menu"
-        >
-          <Menu size={20} />
-        </button>
+        <div className="mr-2 flex items-center gap-0.5">
+          <GlobalSearch orgId={active.id} variant="icon" />
+          <ThemeToggle className="h-9 w-9" />
+          <button
+            onClick={() => setMobileOpen(true)}
+            className="rounded-md p-2 text-muted hover:bg-panel-2 hover:text-foreground"
+            aria-label="Open navigation menu"
+          >
+            <Menu size={20} />
+          </button>
+        </div>
       </div>
 
       {/* Fixed desktop sidebar (md+) */}
@@ -370,7 +377,13 @@ function Shell({
       )}
 
       {/* Main */}
-      <main className="min-w-0 flex-1 overflow-y-auto">{children}</main>
+      <main className="min-w-0 flex-1 overflow-y-auto">
+        {/* Desktop-only sticky top bar; mobile gets search/theme in its top bar above. */}
+        <div className="hidden md:block">
+          <TopBar orgId={active.id} />
+        </div>
+        {children}
+      </main>
     </div>
   );
 }

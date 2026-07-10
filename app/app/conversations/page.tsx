@@ -45,7 +45,7 @@ export default async function ConversationsPage() {
   const canCreate = org.role !== "VIEWER";
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
       <PageHeader
         title="Conversations"
         subtitle="Each conversation analyzes one or more datasets — pick several to let the agent join them."

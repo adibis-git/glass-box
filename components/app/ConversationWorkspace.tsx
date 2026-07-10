@@ -268,10 +268,14 @@ function RunBlock({
         )}
 
         {/* Collapsible agent trace — the glass box. Shows the WORK behind the
-            answer (plan · code · output · fixes); the answer/report itself is
-            surfaced above, so this stays collapsed by default. */}
+            answer (plan · code · output · fixes). Report turns open EXPANDED so
+            the decision's reasoning reads at a glance; quick-answer turns stay
+            collapsed (answer-first). Live runs are always open. */}
         {traceFeed.length > 0 && (
-          <details className="group rounded-xl border border-border/70 bg-panel/40 open:bg-panel/60" open={live}>
+          <details
+            className="group rounded-xl border border-border/70 bg-panel/40 open:bg-panel/60"
+            open={live || Boolean(state.report)}
+          >
             <summary className="flex cursor-pointer select-none list-none items-center gap-1.5 px-3 py-2 text-xs font-medium text-muted transition-colors hover:text-foreground">
               <ChevronRight size={13} className="shrink-0 transition-transform group-open:rotate-90" />
               <Wrench size={13} className="shrink-0" />

@@ -37,7 +37,7 @@ export default async function AdminLeadsPage() {
   }, {});
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
       <PageHeader
         title="Leads"
         subtitle="Demo and contact requests captured from the marketing site. Stored in your database — nothing is sent anywhere else."

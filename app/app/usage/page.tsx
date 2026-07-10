@@ -25,7 +25,7 @@ export default async function UsagePage() {
   const maxDay = Math.max(1, ...usage.byDay.map((d) => d.tokens));
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
       <PageHeader
         title="Usage"
         subtitle="Analysis runs and token consumption across every conversation in this workspace."
