@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
 export function UploadButton({ orgId }: { orgId: string }) {
@@ -45,7 +46,13 @@ export function UploadButton({ orgId }: { orgId: string }) {
         }}
       />
       <Button variant="primary" size="sm" disabled={busy} onClick={() => fileRef.current?.click()}>
-        {busy ? "Uploading…" : "⬆ Upload CSV / Excel / PDF / DOCX"}
+        {busy ? (
+          "Uploading…"
+        ) : (
+          <span className="inline-flex items-center gap-1.5">
+            <Upload size={15} /> Upload CSV / Excel / PDF / DOCX
+          </span>
+        )}
       </Button>
       {error && <span className="text-xs text-red">{error}</span>}
     </div>

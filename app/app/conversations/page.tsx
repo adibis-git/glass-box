@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getActiveOrg } from "@/lib/activeOrg";
 import { prisma } from "@/lib/db";
 import { fmtDate } from "@/lib/utils";
+import { MessagesSquare } from "lucide-react";
 import { PageHeader } from "@/components/app/PageHeader";
 import { NewConversation } from "@/components/app/NewConversation";
 
@@ -52,11 +53,13 @@ export default async function ConversationsPage() {
       />
       {conversations.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-panel/50 p-12 text-center">
-          <div className="mb-3 text-4xl">💬</div>
+          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-xl border border-accent/40 bg-accent/15 text-accent">
+            <MessagesSquare size={22} />
+          </div>
           <h2 className="text-sm font-semibold text-foreground">No conversations yet</h2>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
-            Open a dataset and click <span className="text-foreground/80">Analyze</span> to start
-            your first conversation.
+            Open a source and click <span className="text-foreground/80">Analyze</span> to start
+            your first conversation — ask across spreadsheets and documents alike.
           </p>
           <Link
             href="/app/datasets"

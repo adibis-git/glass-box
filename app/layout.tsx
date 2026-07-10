@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Glass Box — Watch the agent think",
+  title: "Glass Box — the governed AI analyst your team owns",
   description:
-    "A browser-based agentic data analyst powered by Claude. Upload a CSV and watch a transparent plan → code → execute → self-correct → report loop, live.",
+    "A self-hosted AI analyst powered by claude-sonnet-5. Ask questions across your spreadsheets and documents and get answers that show their evidence — the Python for your data, the cited clauses for your documents — without your files ever leaving your infrastructure.",
 };
 
 export default function RootLayout({

@@ -2,6 +2,7 @@
 // report, its charts, and when it was generated. Every view is audited.
 
 import { notFound } from "next/navigation";
+import { ScanSearch } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { ReportPanel } from "@/components/ReportPanel";
@@ -29,12 +30,12 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
   const charts = (snapshot.charts as unknown as ChartSpec[]) ?? [];
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border bg-panel/60">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-2">
-            <span className="grid h-7 w-7 place-items-center rounded-md border border-accent/40 bg-accent/15 text-sm">
-              🔎
+            <span className="grid h-7 w-7 place-items-center rounded-md border border-accent/40 bg-accent/15 text-accent">
+              <ScanSearch size={16} />
             </span>
             <span className="font-semibold tracking-tight text-foreground">Glass Box</span>
           </div>
@@ -55,8 +56,8 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
           <ChartRenderer key={i} spec={spec} />
         ))}
         <footer className="pt-6 text-center text-xs text-muted">
-          Made with <span className="text-accent">Glass Box</span> — the data analysis companion
-          that shows its work.
+          Made with <span className="text-accent">Glass Box</span> — the governed AI analyst
+          that shows its evidence, across data and documents.
         </footer>
       </main>
     </div>

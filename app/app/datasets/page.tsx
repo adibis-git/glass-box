@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getActiveOrg } from "@/lib/activeOrg";
 import { prisma } from "@/lib/db";
 import { fmtInt, fmtDate } from "@/lib/utils";
+import { Database } from "lucide-react";
 import { PageHeader } from "@/components/app/PageHeader";
 import { UploadButton } from "@/components/app/UploadButton";
 
@@ -54,17 +55,19 @@ export default async function DatasetsPage() {
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
       <PageHeader
         title="Datasets"
-        subtitle="Upload CSV or Excel files, then start a conversation to analyze them."
+        subtitle="Upload CSV, Excel, PDF, or DOCX files, then start a conversation to analyze them."
         action={canUpload ? <UploadButton orgId={org.id} /> : undefined}
       />
 
       {datasets.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-panel/50 p-12 text-center">
-          <div className="mb-3 text-4xl">🗂️</div>
+          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-xl border border-accent/40 bg-accent/15 text-accent">
+            <Database size={22} />
+          </div>
           <h2 className="text-sm font-semibold text-foreground">No datasets yet</h2>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
             {canUpload
-              ? "Upload a CSV or Excel file to get started. Messy files welcome — we'll clean them and show you what changed."
+              ? "Upload a CSV, Excel, PDF, or DOCX file to get started. Spreadsheets get profiled and cleaned; documents get retrieved and cited — and we show you exactly what we found."
               : "A member or admin needs to upload data before you can view analyses."}
           </p>
           {canUpload && (
