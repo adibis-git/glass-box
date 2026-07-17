@@ -11,6 +11,7 @@ import { runOpenRouterTurn, generateOpenRouterReport } from "@/lib/agent/provide
 import { getKernelRegistry, type DatasetRef } from "@/server/exec/registry";
 import { classifyIntent } from "@/server/agent/scopeGate";
 import { verifyReport } from "@/lib/agent/verifier";
+import { reportToHistoryText } from "@/lib/agent/report";
 import { buildSystemPrompt } from "@/lib/agent/systemPrompt";
 import {
   buildContextPack,
@@ -452,7 +453,13 @@ export async function runAgentTurn(input: RunnerInput): Promise<RunnerOutput> {
           emit({ type: "verification", id: uid("verify"), ok: verdict.ok, issues: verdict.issues });
         }
 
-        if (assistantText.trim()) push({ role: "assistant", content: assistantText });
+        // Fold BOTH the pre-report text and the report itself into history so a
+        // follow-up turn remembers what was concluded (figures, currency, etc.).
+        // Without the report text, the model denies its own numbers next turn.
+        const historyText = [assistantText.trim(), reportToHistoryText(report)]
+          .filter(Boolean)
+          .join("\n\n");
+        push({ role: "assistant", content: historyText });
         emit({ type: "report", id: uid("report"), report });
         followUps = await settleFollowUps(report, assistantText);
         emit({ type: "status", status: "done" });

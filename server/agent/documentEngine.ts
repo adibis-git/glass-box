@@ -14,6 +14,7 @@ import { runAnthropicTurn, generateAnthropicReport } from "@/lib/agent/providers
 import { runOpenRouterTurn, generateOpenRouterReport } from "@/lib/agent/providers/openrouter";
 import { classifyDocumentIntent } from "@/server/agent/scopeGate";
 import { verifyReport } from "@/lib/agent/verifier";
+import { reportToHistoryText } from "@/lib/agent/report";
 import { buildDocumentSystemPrompt } from "@/lib/agent/systemPrompt";
 import { DOCUMENT_TOOLS } from "@/lib/agent/documentTools";
 import { retrievePassages, type RetrievableDoc } from "@/lib/agent/documentRetrieval";
@@ -378,7 +379,12 @@ export async function runDocumentTurn(input: DocumentRunnerInput): Promise<Runne
           emit({ type: "verification", id: uid("verify"), ok: verdict.ok, issues: verdict.issues });
         }
 
-        if (assistantText.trim()) push({ role: "assistant", content: assistantText });
+        // Fold the report into history so a follow-up turn remembers what was
+        // concluded (findings, cited figures) instead of denying its own report.
+        const historyText = [assistantText.trim(), reportToHistoryText(report)]
+          .filter(Boolean)
+          .join("\n\n");
+        push({ role: "assistant", content: historyText });
         emit({ type: "report", id: uid("report"), report });
         followUps = await settleFollowUps(report, assistantText);
         emit({ type: "status", status: "done" });

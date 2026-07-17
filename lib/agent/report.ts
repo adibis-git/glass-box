@@ -157,6 +157,27 @@ function coerceInsights(v: unknown) {
     .filter((i) => i.finding.trim());
 }
 
+/**
+ * Render a FinalReport as compact text to fold into the conversation history.
+ * The report is otherwise only stored for display (Message.report) and never
+ * enters the apiMessages the model sees on the next turn — which made the model
+ * unable to answer follow-ups about its own report (it would deny figures like
+ * "GHS 9.5M" that only ever appeared in the report). Keeping it in history gives
+ * the model memory of what it actually concluded.
+ */
+export function reportToHistoryText(report: FinalReport): string {
+  const lines = [`[Final report I delivered]`, report.headline];
+  if (report.summary) lines.push(report.summary);
+  if (report.metrics?.length) {
+    lines.push("Key metrics: " + report.metrics.map((m) => `${m.label}: ${m.value}`).join("; "));
+  }
+  if (report.insights?.length) {
+    lines.push("Insights: " + report.insights.map((i) => i.finding).join(" | "));
+  }
+  if (report.recommendation) lines.push(`Recommendation: ${report.recommendation}`);
+  return lines.join("\n");
+}
+
 /** Normalize an object (from a tool input or parsed JSON) into a FinalReport. */
 export function normalizeReport(input: Record<string, unknown>): FinalReport {
   return {
